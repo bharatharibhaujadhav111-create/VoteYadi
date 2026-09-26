@@ -1,0 +1,7 @@
+"""Start the Voter Finder server:  python backend/run.py"""
+import uvicorn
+
+from app import config
+
+if __name__ == "__main__":
+    uvicorn.run("app.main:app", host=config.HOST, port=config.PORT, workers=1, log_level="info")
