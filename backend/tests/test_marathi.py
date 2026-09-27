@@ -5,7 +5,11 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 from pathlib import Path
+from unittest.mock import patch
+
+import pymupdf
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -16,7 +20,7 @@ from app.core.text_utils import (  # noqa: E402
 )
 from app.search_index.index_store import SearchIndex  # noqa: E402
 from app.pdf_manager.pdf_parser import (  # noqa: E402
-    _repair_ocr_epics, order_by_columns, parse_page_text,
+    _parse_page_job, _repair_ocr_epics, ocr_language_for, order_by_columns, parse_page_text,
 )
 
 FAILS: list[str] = []
@@ -45,6 +49,16 @@ check("pure devanagari", dev.detect_script("रामचंद्र जाध�
 check("pure latin", dev.detect_script("Ramchandra Jadhav"), "latin")
 check("marathi page profile -> mar+eng", mar.page_profile("नाव : रामचंद्र जाधव EPIC ZCG1234567")["suggested_lang"], "mar+eng")
 check("english page profile -> eng", mar.page_profile("Name : Vinayshree Bharat Jadhav")["suggested_lang"], "eng")
+check("scanned Marathi page uses Marathi OCR", ocr_language_for("नाव : राजकुमार गुंड", scanned=True), "mar")
+check("scanned English page uses English OCR", ocr_language_for("Name: Vinayshree Jadhav Father Name: Bharat Jadhav", scanned=True), "eng")
+with tempfile.TemporaryDirectory() as temp_dir:
+    sample = Path(temp_dir) / "short-text-layer.pdf"
+    with pymupdf.open() as pdf:
+        pdf.new_page().insert_text((72, 72), "STAMP")
+        pdf.save(sample)
+    with patch("app.pdf_manager.pdf_parser._ocr_lines", return_value=[]) as mocked_ocr:
+        _parse_page_job((str(sample), 0))
+    check("short text layer still uses scanned Marathi OCR", mocked_ocr.call_args.kwargs["lang"], "mar")
 
 print("\n== cross-script skeleton (the accuracy core) ==")
 for latin, deva in [

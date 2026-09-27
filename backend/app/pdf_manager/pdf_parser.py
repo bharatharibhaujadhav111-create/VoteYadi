@@ -123,7 +123,10 @@ def ocr_language_for(text: str, *, scanned: bool = False) -> str:
     if scanned:
         if looks_english(text):
             return config.OCR_LANG or "eng"
-        return f'{config.OCR_LANG_DEV}+{config.OCR_LANG or "eng"}'
+        # On Marathi voter cards the English model can turn Devanagari names
+        # into plausible-looking Latin fragments ("AGA", "agar", "Goats").
+        # The Marathi model still reads the numeric serials and EPIC headers.
+        return config.OCR_LANG_DEV
     prof = mar.page_profile(text)
     if prof["script"] == "latin" and looks_english(text):
         return config.OCR_LANG or "eng"
@@ -665,18 +668,16 @@ def _parse_page_job(args: tuple[str, int]) -> tuple[int, str, bool, list[dict]]:
     with pymupdf.open(path) as doc:
         page = doc[page_index]
         lines = _page_lines(page)
-        # A text layer, when present, tells us which language this page is in –
-        # even a stamp or watermark is enough to pick the right OCR model.
         probe = " ".join(l[2] for l in lines)
         text_len = len(probe.strip())
-        lang = ocr_language_for(probe)
         used_ocr = False
         if text_len < config.OCR_MIN_TEXT_CHARS:
-            # Scanned page (Marathi rolls are one giant image per page): rasterise
-            # a small probe strip first and let the script in it choose the model.
+            # A short text layer may be only a stamp or watermark. Treat the
+            # page as scanned and use Marathi OCR unless the probe clearly
+            # identifies an English roll.
             if config.OCR_LANG_AUTO and not probe.strip():
                 probe = _probe_page_text(page)
-                lang = ocr_language_for(probe, scanned=True)
+            lang = ocr_language_for(probe, scanned=True)
             ocr = _ocr_lines(page, lang=lang)
             if ocr:
                 lines = ocr

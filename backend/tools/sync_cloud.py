@@ -114,6 +114,7 @@ def validate(rows: list[dict], pages: int, ocr_pages: int) -> dict:
     """Hold suspicious OCR for review instead of publishing it."""
     names = [r["name"] for r in rows]
     serials = [r["serial"] for r in rows if r["serial"]]
+    duplicate_serials = len(serials) - len(set(serials))
     epics = [r["epic"].replace(" ", "").upper() for r in rows if r["epic"]]
     dev_names = sum(bool(re.search(r"[\u0900-\u097f]", name)) for name in names)
     invalid_pages = sum(not 1 <= int(r["page"]) <= pages for r in rows)
@@ -122,6 +123,11 @@ def validate(rows: list[dict], pages: int, ocr_pages: int) -> dict:
         (r["name_normalized"], r["relation_name_normalized"], r["serial"], r["page"])
         for r in rows
     })
+    mixed_script = [
+        {"serial": r["serial"], "page": r["page"]}
+        for r in rows
+        if re.search(r"[A-Za-z]", r["name"] + " " + r["relation_name"])
+    ]
     report = {
         "version": 1,
         "checked_at": datetime.now(timezone.utc).isoformat(),
@@ -131,9 +137,12 @@ def validate(rows: list[dict], pages: int, ocr_pages: int) -> dict:
         "records_per_page": round(len(rows) / max(pages, 1), 2),
         "marathi_name_ratio": round(dev_names / max(len(names), 1), 4),
         "serial_coverage": round(len(serials) / max(len(rows), 1), 4),
+        "duplicate_serials": duplicate_serials,
         "duplicate_epics": duplicate_epics,
         "duplicate_records": duplicate_records,
         "invalid_page_records": invalid_pages,
+        "mixed_script_records": len(mixed_script),
+        "mixed_script_examples": mixed_script[:10],
         "checks": [],
     }
     failures = []
@@ -145,12 +154,16 @@ def validate(rows: list[dict], pages: int, ocr_pages: int) -> dict:
         failures.append("Too few extracted names contain Marathi text")
     if report["serial_coverage"] < 0.45:
         failures.append("Too many voter serial numbers are missing")
+    if duplicate_serials:
+        failures.append(f"{duplicate_serials} voter serial numbers are duplicated")
     if invalid_pages:
         failures.append(f"{invalid_pages} records refer to invalid PDF pages")
     if duplicate_records > max(3, int(len(rows) * 0.02)):
         failures.append("Too many duplicate voter blocks were extracted")
     if duplicate_epics > max(3, int(max(len(epics), 1) * 0.03)):
         failures.append("Too many duplicate EPIC numbers were extracted")
+    if mixed_script:
+        failures.append(f"{len(mixed_script)} Marathi voter names contain English OCR fragments")
     report["checks"] = failures or ["passed"]
     report["status"] = "review" if failures else "passed"
     if failures:

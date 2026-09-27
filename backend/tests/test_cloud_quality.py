@@ -14,6 +14,7 @@ def rows(count: int, *, marathi: bool = True, serials: bool = True) -> list[dict
         {
             "name": f"मतदार नाव {i}" if marathi else f"Voter Name {i}",
             "name_normalized": f"मतदार नाव {i}" if marathi else f"voter name {i}",
+            "relation_name": f"नातेवाईक {i}",
             "relation_name_normalized": f"नातेवाईक {i}",
             "serial": str(i + 1) if serials else "",
             "epic": f"ZCG{i:07d}",
@@ -26,6 +27,27 @@ def rows(count: int, *, marathi: bool = True, serials: bool = True) -> list[dict
 good = validate(rows(100), pages=5, ocr_pages=5)
 assert good["status"] == "passed"
 assert good["records"] == 100
+assert good["mixed_script_records"] == 0
+assert good["duplicate_serials"] == 0
+
+mixed = rows(100)
+mixed[24]["name"] = "राजकुमार AGA गुंड"
+try:
+    validate(mixed, pages=5, ocr_pages=5)
+except QualityError as error:
+    assert error.report["mixed_script_records"] == 1
+    assert error.report["mixed_script_examples"][0]["serial"] == "25"
+else:
+    raise AssertionError("Quality gate accepted English OCR noise in a Marathi name")
+
+repeated_serial = rows(100)
+repeated_serial[24]["serial"] = "24"
+try:
+    validate(repeated_serial, pages=5, ocr_pages=5)
+except QualityError as error:
+    assert error.report["duplicate_serials"] == 1
+else:
+    raise AssertionError("Quality gate accepted a duplicated voter serial")
 
 for bad_rows, pages, reason in [
     (rows(5), 20, "too few records"),
