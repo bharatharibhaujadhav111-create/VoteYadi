@@ -60,7 +60,7 @@ class _SearchCardState extends State<SearchCard> {
           const SectionTitle(icon: Icons.search_rounded, title: 'नाव शोधा', center: true),
           const SizedBox(height: 4),
           const Text(
-            'मतदाराचे नाव किंवा वडिलांचे / पतीचे नाव टाका आणि यादीत शोधा',
+            'मतदाराचे नाव मराठीत किंवा English मध्ये टाका आणि यादीत शोधा',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
           ),
@@ -108,7 +108,7 @@ class _SearchCardState extends State<SearchCard> {
       onSubmitted: _submit,
       style: const TextStyle(fontSize: 15),
       decoration: InputDecoration(
-        hintText: 'उदा. विजयसिंह जाधव किंवा भारत जाधव',
+        hintText: 'उदा. विजयसिंह जाधव किंवा Vijaysinh Jadhav',
         prefixIcon: const Icon(Icons.person_search_rounded, color: AppColors.textMuted),
         suffixIcon: _text.text.isEmpty
             ? null

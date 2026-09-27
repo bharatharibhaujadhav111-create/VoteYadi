@@ -112,6 +112,26 @@ class _IndexPill extends StatelessWidget {
         child: Pill(label: p.ocrPages > 0 ? 'Indexed (OCR)' : 'Indexed', icon: Icons.check_circle_rounded, color: AppColors.greenLight, textColor: AppColors.green),
       );
     }
+    if (p.status == 'needs_review') {
+      return Tooltip(
+        message: p.error.isEmpty ? 'OCR quality checks require review' : p.error,
+        child: const Pill(
+          label: 'Needs review',
+          icon: Icons.report_problem_rounded,
+          color: Color(0xFFFFE8E5),
+          textColor: AppColors.danger,
+        ),
+      );
+    }
+    if (p.status == 'processing') {
+      return const Pill(label: 'Processing', icon: Icons.sync_rounded, color: AppColors.saffronLight, textColor: AppColors.saffronDark);
+    }
+    if (p.status == 'failed') {
+      return Tooltip(
+        message: p.error.isEmpty ? 'Indexing failed' : p.error,
+        child: const Pill(label: 'Failed', icon: Icons.error_rounded, color: Color(0xFFFFE8E5), textColor: AppColors.danger),
+      );
+    }
     return const Pill(label: 'Pending', icon: Icons.hourglass_top_rounded, color: AppColors.saffronLight, textColor: AppColors.saffronDark);
   }
 }

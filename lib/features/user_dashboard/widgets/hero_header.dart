@@ -41,7 +41,7 @@ class HeroHeader extends StatelessWidget {
                     _Leader(
                       asset: 'assets/images/praniti_shinde.jpg',
                       honorific: 'मा. खासदार',
-                      name: 'प्रणीतीताई शिंदे',
+                      name: 'प्रणितीताई शिंदे',
                       size: narrow ? 84 : 110,
                     ),
                     Expanded(child: _Title(narrow: narrow)),

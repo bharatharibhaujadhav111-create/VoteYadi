@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="mr">
+<head>
+  <base href="/">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#123769">
+  <title>मतदार यादी PDF</title>
+  <link rel="stylesheet" href="pdf-viewer.css">
+</head>
+<body>
+  <header class="toolbar">
+    <a class="back" href="/" aria-label="मागे जा">‹</a>
+    <div class="title">
+      <strong>मतदार यादी PDF</strong>
+      <span id="status">PDF उघडत आहे…</span>
+    </div>
+    <a id="download" class="download" href="#" download>डाउनलोड</a>
+  </header>
+
+  <main id="stage" class="stage" aria-live="polite">
+    <div id="loader" class="loader"><span></span><p>पान तयार होत आहे…</p></div>
+    <div id="page-wrap" class="page-wrap">
+      <canvas id="pdf-canvas"></canvas>
+      <div id="voter-highlight" class="voter-highlight" aria-label="शोधलेला मतदार" hidden></div>
+    </div>
+    <div id="error" class="error" hidden></div>
+  </main>
+
+  <nav class="controls" aria-label="PDF पान नियंत्रण">
+    <button id="previous" type="button" aria-label="मागील पान">‹</button>
+    <label>पान <input id="page-number" type="number" inputmode="numeric" min="1" value="1"></label>
+    <span id="page-count">/ —</span>
+    <button id="next" type="button" aria-label="पुढील पान">›</button>
+    <span class="divider"></span>
+    <button id="zoom-out" type="button" aria-label="झूम कमी">−</button>
+    <span id="zoom-level">100%</span>
+    <button id="zoom-in" type="button" aria-label="झूम वाढवा">+</button>
+  </nav>
+
+  <script type="module" src="pdf-viewer.js"></script>
+</body>
+</html>

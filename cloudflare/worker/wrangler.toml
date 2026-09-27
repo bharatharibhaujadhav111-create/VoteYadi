@@ -1,0 +1,19 @@
+name = "voteyadi-api"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+# Supabase values are managed in Cloudflare's dashboard. Preserve them when
+# deploying code from this repository; secret values must never be committed.
+keep_vars = true
+
+[[r2_buckets]]
+binding = "PDF_BUCKET"
+bucket_name = "voteyadi-pdfs"
+
+[vars]
+# Set this to the final Cloudflare Pages address after Pages is deployed.
+ALLOWED_ORIGIN = "*"
+SUPABASE_URL = "https://qydtlqwcaaqyxuvfvwzb.supabase.co"
+
+# Add these securely with `wrangler secret put` (never commit their values):
+# SUPABASE_URL
+# SUPABASE_SECRET_KEY

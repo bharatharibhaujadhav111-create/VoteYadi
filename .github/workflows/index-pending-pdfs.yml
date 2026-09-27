@@ -1,0 +1,111 @@
+name: Index pending voter PDFs
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+
+# A later scheduled run waits instead of discovering the same pending PDFs.
+concurrency:
+  group: voteyadi-pdf-index-queue
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PYTHONIOENCODING: utf-8
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+  R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  R2_BUCKET: ${{ secrets.R2_BUCKET }}
+  VF_OCR_ENABLED: "1"
+  VF_OCR_DPI: "300"
+  VF_OCR_TARGET_WIDTH_PX: "2600"
+  VF_OCR_LANG: eng
+  VF_OCR_LANG_DEV: mar
+  VF_OCR_LANG_AUTO: "1"
+  VF_OCR_LANG_BLEND: "1"
+  OMP_THREAD_LIMIT: "1"
+
+jobs:
+  discover:
+    name: Find pending PDFs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.queue.outputs.matrix }}
+      has_work: ${{ steps.queue.outputs.has_work }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-ocr-lock.txt
+      - run: python -m pip install --disable-pip-version-check httpx
+      - id: queue
+        name: Build one-job-per-PDF matrix
+        shell: bash
+        run: |
+          pending="$(python backend/tools/sync_cloud.py --list-pending --limit 20)"
+          echo "matrix={\"include\":${pending}}" >> "$GITHUB_OUTPUT"
+          if [ "$pending" = "[]" ]; then
+            echo "has_work=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_work=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Pending matrix: $pending"
+
+  process:
+    name: OCR ${{ matrix.name }}
+    needs: discover
+    if: needs.discover.outputs.has_work == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-ocr-lock.txt
+      - name: Install fixed Marathi OCR engine
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes tesseract-ocr tesseract-ocr-mar tesseract-ocr-eng
+          tesseract --version
+          tesseract --list-langs
+      - name: Install parser dependencies
+        run: python -m pip install --disable-pip-version-check -r backend/requirements-ocr-lock.txt
+      - name: OCR, validate, and atomically publish
+        shell: bash
+        run: |
+          set +e
+          final_code=1
+          for attempt in 1 2 3; do
+            echo "Processing attempt $attempt of 3"
+            final_flag=""
+            if [ "$attempt" -eq 3 ]; then final_flag="--final-attempt"; fi
+            python backend/tools/sync_cloud.py \
+              --document "${{ matrix.document_id }}" --claim --workers 2 $final_flag
+            final_code=$?
+            if [ "$final_code" -eq 0 ]; then
+              exit 0
+            fi
+            if [ "$final_code" -eq 2 ]; then
+              echo "OCR completed but quality checks require review; not retrying."
+              exit 2
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Temporary failure; retrying after $((attempt * 20)) seconds."
+              sleep $((attempt * 20))
+            fi
+          done
+          exit "$final_code"

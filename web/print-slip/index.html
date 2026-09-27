@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="mr">
+<head>
+  <base href="/">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123769">
+  <title>मतदार स्लिप</title>
+  <link rel="stylesheet" href="print-slip.css">
+</head>
+<body>
+  <div class="actions">
+    <button id="print" type="button">🖨 मतदार स्लिप प्रिंट करा</button>
+    <button type="button" onclick="window.close()">बंद करा</button>
+  </div>
+
+  <main id="slip" class="slip" hidden>
+    <header>
+      <div class="flag"><span></span><span></span><span></span></div>
+      <p>मतदार यादी शोध केंद्र · उत्तर सोलापूर</p>
+      <h1>मतदार माहिती स्लिप</h1>
+    </header>
+    <section class="identity">
+      <div><small>मतदाराचे नाव</small><strong id="name">—</strong></div>
+      <div class="serial"><small>अनुक्रमांक</small><strong id="serial">—</strong></div>
+    </section>
+    <dl>
+      <div><dt id="relation-label">वडील / पतीचे नाव</dt><dd id="relation">—</dd></div>
+      <div><dt>EPIC क्रमांक</dt><dd id="epic">—</dd></div>
+      <div><dt>वय / लिंग</dt><dd id="age-gender">—</dd></div>
+      <div><dt>घर क्रमांक</dt><dd id="house">—</dd></div>
+      <div><dt>गाव</dt><dd id="village">—</dd></div>
+      <div><dt>भाग / बूथ क्रमांक</dt><dd id="part">—</dd></div>
+      <div><dt>PDF मधील पान</dt><dd id="page">—</dd></div>
+    </dl>
+    <footer>
+      <p id="pdf-name"></p>
+      <strong>मतदानापूर्वी अधिकृत यादीतील माहिती पडताळून घ्या.</strong>
+    </footer>
+  </main>
+
+  <div id="loading" class="message">मतदार स्लिप तयार होत आहे…</div>
+  <div id="error" class="message error" hidden></div>
+  <script type="module" src="print-slip.js"></script>
+</body>
+</html>
+

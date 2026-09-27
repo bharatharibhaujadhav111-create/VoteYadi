@@ -58,6 +58,35 @@ class ResultsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if ((parsed['transliterated'] as String? ?? '').isNotEmpty)
+          Container(
+            margin: const EdgeInsets.fromLTRB(4, 0, 4, 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.greenLight,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.green.withValues(alpha: 0.25)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.translate_rounded, size: 19, color: AppColors.green),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        const TextSpan(text: 'इंग्रजी नावाचा मराठी शोध: ', style: TextStyle(color: AppColors.textSecondary)),
+                        TextSpan(
+                          text: parsed['transliterated'] as String,
+                          style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.green, fontSize: 15),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
           child: Wrap(
@@ -504,6 +533,7 @@ class ResultCard extends StatelessWidget {
                               context,
                               r.pdf,
                               page: r.page,
+                              voterId: r.id,
                               title: r.pdfName,
                             ),
                             icon: const Icon(
@@ -513,13 +543,9 @@ class ResultCard extends StatelessWidget {
                             label: Text('पान ${r.page} वर उघडा'),
                           ),
                           OutlinedButton.icon(
-                            onPressed: () =>
-                                viewer.open(context, r.pdf, page: r.page),
-                            icon: const Icon(
-                              Icons.open_in_new_rounded,
-                              size: 17,
-                            ),
-                            label: const Text('PDF उघडा'),
+                            onPressed: () => viewer.printSlip(context, r.id),
+                            icon: const Icon(Icons.print_rounded, size: 17),
+                            label: const Text('मतदार स्लिप प्रिंट करा'),
                           ),
                           OutlinedButton.icon(
                             onPressed: () => viewer.download(context, r.pdf),

@@ -1,0 +1,52 @@
+@font-face {
+  font-family: "VoteYadi Devanagari";
+  src: url("/assets/assets/fonts/NotoSansDevanagari-Regular.ttf") format("truetype");
+  font-weight: 400;
+}
+@font-face {
+  font-family: "VoteYadi Devanagari";
+  src: url("/assets/assets/fonts/NotoSansDevanagari-Bold.ttf") format("truetype");
+  font-weight: 700;
+}
+:root { font-family: "VoteYadi Devanagari", system-ui, sans-serif; color: #172238; background: #e8edf3; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 22px 12px 40px; }
+.actions { display: flex; justify-content: center; gap: 10px; margin-bottom: 16px; }
+.actions button { border: 1px solid #123769; border-radius: 9px; padding: 10px 14px; color: #123769; background: white; font: inherit; font-weight: 700; cursor: pointer; }
+.actions button:first-child { color: white; background: #17733d; border-color: #17733d; }
+.slip { width: 105mm; min-height: 148mm; margin: auto; padding: 8mm; background: white; border: 1px solid #9099a8; box-shadow: 0 5px 25px #0002; }
+header { text-align: center; border-bottom: 2px solid #123769; padding-bottom: 4mm; }
+.flag { height: 3px; display: grid; grid-template-columns: 1fr 1fr 1fr; margin: -2mm 0 4mm; }
+.flag span:nth-child(1) { background: #ef7d22; }
+.flag span:nth-child(2) { background: #eee; }
+.flag span:nth-child(3) { background: #168342; }
+header p { margin: 0; color: #5b6573; font-size: 9pt; font-weight: 700; }
+header h1 { margin: 2mm 0 0; color: #123769; font-size: 17pt; }
+.identity { display: grid; grid-template-columns: 1fr auto; gap: 5mm; align-items: start; margin: 6mm 0 4mm; padding: 4mm; background: #f3f7fb; border-radius: 3mm; }
+.identity small, dt { display: block; color: #697586; font-size: 8pt; }
+.identity strong { display: block; margin-top: 1mm; font-size: 14pt; line-height: 1.25; }
+.identity .serial { min-width: 22mm; text-align: center; border: 1px solid #123769; padding: 2mm; background: white; }
+dl { margin: 0; border: 1px solid #ccd3dc; border-radius: 2mm; overflow: hidden; }
+dl div { display: grid; grid-template-columns: 39% 61%; border-bottom: 1px solid #d9dfe7; }
+dl div:last-child { border-bottom: 0; }
+dt, dd { margin: 0; padding: 2.3mm 3mm; }
+dt { background: #f6f7f9; font-weight: 700; }
+dd { font-size: 10pt; font-weight: 700; overflow-wrap: anywhere; }
+footer { margin-top: 5mm; padding-top: 3mm; border-top: 1px dashed #9aa4b2; text-align: center; }
+footer p { margin: 0 0 2mm; color: #697586; font-size: 7pt; overflow-wrap: anywhere; }
+footer strong { font-size: 8pt; color: #8c4b00; }
+.message { max-width: 105mm; margin: 30px auto; padding: 16px; text-align: center; }
+.error { color: #921f1f; background: #fff0f0; border-radius: 8px; }
+
+@page { size: A6 portrait; margin: 0; }
+@media print {
+  html, body { width: 105mm; height: 148mm; background: white; }
+  body { padding: 0; }
+  .actions, .message { display: none !important; }
+  .slip { display: block !important; width: 105mm; min-height: 148mm; border: 0; box-shadow: none; margin: 0; }
+}
+@media (max-width: 430px) {
+  body { padding-inline: 6px; }
+  .slip { width: 100%; min-height: auto; padding: 6mm; }
+}
+

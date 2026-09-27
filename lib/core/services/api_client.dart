@@ -102,10 +102,32 @@ class ApiClient {
 
   Future<PublicStats> stats() async => PublicStats.fromJson(await _get('/api/stats'));
 
-  String viewUrl(String pdfId, {int? page}) {
+  String viewUrl(String pdfId, {int? page, int? voterId}) {
     final encoded = pdfId.split('/').map(Uri.encodeComponent).join('/');
-    final base = '$baseUrl/pdf/view/$encoded';
-    return page == null ? base : '$base#page=$page';
+    final file = '$baseUrl/pdf/view/$encoded';
+    if (!kIsWeb) return page == null ? file : '$file#page=$page';
+    return Uri(
+      scheme: Uri.base.scheme,
+      host: Uri.base.host,
+      port: Uri.base.hasPort ? Uri.base.port : null,
+      path: '/pdf-viewer/',
+      queryParameters: {
+        'file': file,
+        'page': '${page ?? 1}',
+        if (voterId != null) 'voter': '$voterId',
+      },
+    ).toString();
+  }
+
+  String printSlipUrl(int voterId) {
+    if (!kIsWeb) return '$baseUrl/api/voters/$voterId';
+    return Uri(
+      scheme: Uri.base.scheme,
+      host: Uri.base.host,
+      port: Uri.base.hasPort ? Uri.base.port : null,
+      path: '/print-slip/',
+      queryParameters: {'voter': '$voterId', 'api': baseUrl},
+    ).toString();
   }
 
   String downloadUrl(String pdfId) {

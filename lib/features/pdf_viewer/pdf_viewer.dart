@@ -15,8 +15,8 @@ class PdfViewer {
   PdfViewer(this.api);
   final ApiClient api;
 
-  Future<void> open(BuildContext context, String pdfId, {int? page}) async {
-    final url = api.viewUrl(pdfId, page: page);
+  Future<void> open(BuildContext context, String pdfId, {int? page, int? voterId}) async {
+    final url = api.viewUrl(pdfId, page: page, voterId: voterId);
     final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication, webOnlyWindowName: '_blank');
     if (!ok && context.mounted) showSnack(context, 'PDF उघडता आले नाही', error: true);
   }
@@ -27,14 +27,19 @@ class PdfViewer {
     if (!ok && context.mounted) showSnack(context, 'PDF डाउनलोड करता आले नाही', error: true);
   }
 
-  Future<void> preview(BuildContext context, String pdfId, {int? page, String? title}) {
+  Future<void> printSlip(BuildContext context, int voterId) async {
+    final ok = await launchUrl(Uri.parse(api.printSlipUrl(voterId)), mode: LaunchMode.externalApplication, webOnlyWindowName: '_blank');
+    if (!ok && context.mounted) showSnack(context, 'मतदार स्लिप तयार करता आली नाही', error: true);
+  }
+
+  Future<void> preview(BuildContext context, String pdfId, {int? page, int? voterId, String? title}) {
     return showDialog(
       context: context,
       builder: (ctx) => _PdfPreviewDialog(
-        url: api.viewUrl(pdfId, page: page),
+        url: api.viewUrl(pdfId, page: page, voterId: voterId),
         title: title ?? pdfId,
         page: page,
-        onOpen: () => open(ctx, pdfId, page: page),
+        onOpen: () => open(ctx, pdfId, page: page, voterId: voterId),
         onDownload: () => download(ctx, pdfId),
       ),
     );

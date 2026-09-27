@@ -285,6 +285,8 @@ class PdfFile {
   final bool indexed;
   final int records;
   final int ocrPages;
+  final String status;
+  final String error;
 
   const PdfFile({
     required this.id,
@@ -296,6 +298,8 @@ class PdfFile {
     required this.indexed,
     required this.records,
     required this.ocrPages,
+    required this.status,
+    required this.error,
   });
 
   factory PdfFile.fromJson(Map<String, dynamic> j) => PdfFile(
@@ -308,6 +312,8 @@ class PdfFile {
         indexed: j['indexed'] as bool? ?? false,
         records: (j['records'] as num?)?.toInt() ?? 0,
         ocrPages: (j['ocr_pages'] as num?)?.toInt() ?? 0,
+        status: j['status'] as String? ?? '',
+        error: j['error'] as String? ?? '',
       );
 }
 

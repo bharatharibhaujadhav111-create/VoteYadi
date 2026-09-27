@@ -1,0 +1,8 @@
+# Reproducible dependency set used by GitHub's voter-PDF OCR jobs.
+pymupdf==1.28.2
+rapidfuzz==3.14.6
+pytesseract==0.3.13
+Pillow==12.3.0
+httpx==0.28.1
+boto3==1.43.103
+PyYAML==6.0.3

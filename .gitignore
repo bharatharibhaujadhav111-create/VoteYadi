@@ -37,6 +37,7 @@ migrate_working_dir/
 .env
 .env.*
 !.env.example
+!.env.local.example
 
 # Symbolication related
 app.*.symbols
@@ -58,3 +59,4 @@ server.log
 # Local Codex/plugin artifacts (not part of VoteYadi)
 /chat-interaction-companion/
 /chat-interaction-companion*.zip
+/.firecrawl/

@@ -19,6 +19,8 @@ class VoterFinderApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final api = ApiClient();
+    final browserUri = Uri.base;
+    final initialRoute = browserUri.path + (browserUri.hasQuery ? '?${browserUri.query}' : '');
     return MultiProvider(
       providers: [
         Provider<ApiClient>.value(value: api),
@@ -28,7 +30,7 @@ class VoterFinderApp extends StatelessWidget {
         title: 'मतदार यादी शोध केंद्र | Voter Finder',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
-        initialRoute: '/',
+        initialRoute: initialRoute,
         onGenerateRoute: (settings) {
           final uri = Uri.tryParse(settings.name ?? '/') ?? Uri(path: '/');
           final Widget page = switch (uri.path) {
