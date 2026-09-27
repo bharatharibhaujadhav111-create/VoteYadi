@@ -39,8 +39,8 @@ jobs:
       matrix: ${{ steps.queue.outputs.matrix }}
       has_work: ${{ steps.queue.outputs.has_work }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -70,8 +70,8 @@ jobs:
       max-parallel: 4
       matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -97,10 +97,14 @@ jobs:
               --document "${{ matrix.document_id }}" --claim --workers 2 $final_flag
             final_code=$?
             if [ "$final_code" -eq 0 ]; then
+              echo "### PDF indexed successfully" >> "$GITHUB_STEP_SUMMARY"
+              echo "${{ matrix.name }}" >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             if [ "$final_code" -eq 2 ]; then
               echo "OCR completed but quality checks require review; not retrying."
+              echo "### PDF needs review" >> "$GITHUB_STEP_SUMMARY"
+              echo "${{ matrix.name }} failed quality checks. Check this job's OCR output and the Super Admin status." >> "$GITHUB_STEP_SUMMARY"
               exit 2
             fi
             if [ "$attempt" -lt 3 ]; then
@@ -108,4 +112,6 @@ jobs:
               sleep $((attempt * 20))
             fi
           done
+          echo "### PDF indexing failed" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ matrix.name }} failed after three attempts. Check this job's logs and the Super Admin status." >> "$GITHUB_STEP_SUMMARY"
           exit "$final_code"
