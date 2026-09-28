@@ -52,6 +52,16 @@ complete_except_one[200]["serial"] = ""
 assert _recover_missing_sequence_serials(complete_except_one) == 1
 assert complete_except_one[200]["serial"] == "201"
 
+# A page/column ordering variation elsewhere must not hide a uniquely proven
+# missing value. The set is still complete except for the one blank serial.
+single_blank_with_reordered_cards = [{"serial": str(number)} for number in range(1, 6)]
+single_blank_with_reordered_cards[1], single_blank_with_reordered_cards[2] = (
+    single_blank_with_reordered_cards[2], single_blank_with_reordered_cards[1]
+)
+single_blank_with_reordered_cards[4]["serial"] = ""
+assert _recover_missing_sequence_serials(single_blank_with_reordered_cards) == 1
+assert single_blank_with_reordered_cards[4]["serial"] == "5"
+
 multiple_blanks = [{"serial": "1"}, {"serial": ""}, {"serial": ""}, {"serial": "4"}]
 assert _recover_missing_sequence_serials(multiple_blanks) == 2
 assert [row["serial"] for row in multiple_blanks] == ["1", "2", "3", "4"]
@@ -59,10 +69,13 @@ assert [row["serial"] for row in multiple_blanks] == ["1", "2", "3", "4"]
 for ambiguous in (
     [{"serial": "1"}, {"serial": "4"}, {"serial": ""}],
     [{"serial": "1"}, {"serial": "not-a-number"}, {"serial": ""}],
-    [{"serial": "2"}, {"serial": ""}, {"serial": "3"}],
 ):
     before = [row["serial"] for row in ambiguous]
     assert _recover_missing_sequence_serials(ambiguous) == 0
     assert [row["serial"] for row in ambiguous] == before
+
+unique_set_proof = [{"serial": "2"}, {"serial": ""}, {"serial": "3"}]
+assert _recover_missing_sequence_serials(unique_set_proof) == 1
+assert unique_set_proof[1]["serial"] == "1"
 
 print("PASS: serial recovery requires matching cards and complete sequence")

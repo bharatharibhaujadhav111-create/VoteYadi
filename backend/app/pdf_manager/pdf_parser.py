@@ -750,26 +750,43 @@ def _recover_page_serials(path: Path, page_no: int, rows: list[dict], first_seri
 
 
 def _recover_missing_sequence_serials(rows: list[dict]) -> int:
-    """Fill blank serials only when record order independently proves them.
+    """Fill blank serials only when the complete sequence proves them.
 
-    A normal electoral part is stored in serial order.  We require every
-    serial OCR did read to equal that row's 1-based position before filling a
-    blank.  A wrong, duplicated, shifted, or non-numeric value disables this
-    recovery and leaves the quality gate to hold the PDF for review.
+    With one blank, a unique missing value in an otherwise complete 1..N set
+    is sufficient proof even if OCR returned two cards out of display order.
+    Multiple blanks are filled only when every visible value also matches its
+    row position.  Wrong, duplicated, or unexpected values disable recovery.
     """
-    missing_positions: list[int] = []
+    blank_positions: list[int] = []
+    serials: list[int] = []
     for position, row in enumerate(rows, start=1):
         value = str(row.get("serial") or "").strip()
         if not value:
-            missing_positions.append(position)
+            blank_positions.append(position)
             continue
-        if not value.isdigit() or int(value) != position:
+        if not value.isdigit():
             return 0
-    if not missing_positions:
+        serials.append(int(value))
+    if not blank_positions or len(serials) != len(set(serials)):
         return 0
-    for position in missing_positions:
+    expected = set(range(1, len(rows) + 1))
+    if not set(serials) <= expected:
+        return 0
+    missing = expected - set(serials)
+    if len(missing) != len(blank_positions):
+        return 0
+    if len(blank_positions) == 1:
+        rows[blank_positions[0] - 1]["serial"] = str(next(iter(missing)))
+        return 1
+    if any(
+        str(row.get("serial") or "").strip()
+        and int(row["serial"]) != position
+        for position, row in enumerate(rows, start=1)
+    ):
+        return 0
+    for position in blank_positions:
         rows[position - 1]["serial"] = str(position)
-    return len(missing_positions)
+    return len(blank_positions)
 
 
 def parse_pdf(path: str | Path, *, workers: int = 1, progress: "Callable[[int, int], None] | None" = None) -> PdfParseResult:
