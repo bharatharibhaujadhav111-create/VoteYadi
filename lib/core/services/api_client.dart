@@ -166,6 +166,9 @@ class ApiClient {
 
   Future<IndexStatus> indexStatus() async => IndexStatus.fromJson(await _get('/api/admin/index/status'));
 
+  Future<DuplicateOverview> adminDuplicates() async =>
+      DuplicateOverview.fromJson(await _get('/api/admin/duplicates'));
+
   Future<IndexStatus> rebuildIndex({bool full = true}) async =>
       IndexStatus.fromJson(await _post('/api/admin/index/rebuild', query: {'full': full ? 'true' : 'false'}));
 

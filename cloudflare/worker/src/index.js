@@ -363,6 +363,11 @@ async function handle(request, env) {
     return json({ pdfs: docs.map(pdfJson), index: await indexStatus(env) });
   }
 
+  if (request.method === "GET" && p === "/api/admin/duplicates") {
+    const { body } = await db(env, "rpc/admin_duplicate_voters", { method: "POST", body: "{}" });
+    return json(body || { epic: [], name: [] });
+  }
+
   if (request.method === "POST" && p === "/api/admin/pdfs/upload") {
     const form = await request.formData();
     const villageName = String(form.get("village") || "").trim();

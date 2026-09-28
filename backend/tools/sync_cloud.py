@@ -115,10 +115,19 @@ def validate(rows: list[dict], pages: int, ocr_pages: int) -> dict:
     names = [r["name"] for r in rows]
     serials = [r["serial"] for r in rows if r["serial"]]
     duplicate_serials = len(serials) - len(set(serials))
+    numeric_serials = {int(value) for value in serials if str(value).isdigit()}
+    # A complete electoral part normally starts at 1. Apply a strict sequence
+    # check only when the observed start supports that layout; supplements can
+    # legitimately start at a higher number.
+    sequential_part = bool(numeric_serials) and min(numeric_serials) <= 3
+    missing_sequence = (set(range(1, len(rows) + 1)) - numeric_serials) if sequential_part else set()
+    unexpected_sequence = (numeric_serials - set(range(1, len(rows) + 1))) if sequential_part else set()
     epics = [r["epic"].replace(" ", "").upper() for r in rows if r["epic"]]
     dev_names = sum(bool(re.search(r"[\u0900-\u097f]", name)) for name in names)
     invalid_pages = sum(not 1 <= int(r["page"]) <= pages for r in rows)
     duplicate_epics = len(epics) - len(set(epics))
+    normalized_names = [r["name_normalized"] for r in rows if r["name_normalized"]]
+    duplicate_names = len(normalized_names) - len(set(normalized_names))
     duplicate_records = len(rows) - len({
         (r["name_normalized"], r["relation_name_normalized"], r["serial"], r["page"])
         for r in rows
@@ -138,12 +147,16 @@ def validate(rows: list[dict], pages: int, ocr_pages: int) -> dict:
         "marathi_name_ratio": round(dev_names / max(len(names), 1), 4),
         "serial_coverage": round(len(serials) / max(len(rows), 1), 4),
         "duplicate_serials": duplicate_serials,
+        "serial_sequence_missing": len(missing_sequence),
+        "serial_sequence_unexpected": len(unexpected_sequence),
         "duplicate_epics": duplicate_epics,
+        "duplicate_names": duplicate_names,
         "duplicate_records": duplicate_records,
         "invalid_page_records": invalid_pages,
         "mixed_script_records": len(mixed_script),
         "mixed_script_examples": mixed_script[:10],
         "checks": [],
+        "warnings": [],
     }
     failures = []
     if pages <= 0:
@@ -152,16 +165,20 @@ def validate(rows: list[dict], pages: int, ocr_pages: int) -> dict:
         failures.append(f"Only {len(rows)} voter records were extracted from {pages} pages")
     if report["marathi_name_ratio"] < 0.60:
         failures.append("Too few extracted names contain Marathi text")
-    if report["serial_coverage"] < 0.45:
+    if report["serial_coverage"] < 0.95:
         failures.append("Too many voter serial numbers are missing")
     if duplicate_serials:
         failures.append(f"{duplicate_serials} voter serial numbers are duplicated")
+    if missing_sequence or unexpected_sequence:
+        failures.append(f"Voter serial sequence has {len(missing_sequence)} missing and {len(unexpected_sequence)} unexpected numbers")
     if invalid_pages:
         failures.append(f"{invalid_pages} records refer to invalid PDF pages")
-    if duplicate_records > max(3, int(len(rows) * 0.02)):
-        failures.append("Too many duplicate voter blocks were extracted")
-    if duplicate_epics > max(3, int(max(len(epics), 1) * 0.03)):
-        failures.append("Too many duplicate EPIC numbers were extracted")
+    if duplicate_names:
+        report["warnings"].append(f"{duplicate_names} repeated voter names; retained as separate PDF records")
+    if duplicate_epics:
+        report["warnings"].append(f"{duplicate_epics} repeated EPIC numbers; retained with each record's page and serial")
+    if duplicate_records:
+        report["warnings"].append(f"{duplicate_records} identical parsed voter blocks; retained for review")
     if mixed_script:
         failures.append(f"{len(mixed_script)} Marathi voter names contain English OCR fragments")
     report["checks"] = failures or ["passed"]
@@ -208,8 +225,8 @@ def process_document(
             "document_uuid": document_id, "worker_name": worker,
         })
         if claimed is not True:
-            print(json.dumps({"document": document_id, "status": "skipped", "reason": "already claimed"}))
-            return 0
+            print(json.dumps({"document": document_id, "status": "skipped", "reason": "not claimable; inspect its current status"}))
+            return 3
 
     query = (
         "documents?select=id,village_id,original_filename,r2_key,status,size_bytes,r2_etag"

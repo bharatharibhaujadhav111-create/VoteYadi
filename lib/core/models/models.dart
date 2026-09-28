@@ -89,6 +89,66 @@ class VoterResult {
   }
 }
 
+class DuplicateRecord {
+  final int id;
+  final String name;
+  final String relationName;
+  final String epic;
+  final String serial;
+  final int page;
+  final String village;
+  final String pdf;
+  final String pdfName;
+
+  const DuplicateRecord({required this.id, required this.name, required this.relationName,
+    required this.epic, required this.serial, required this.page, required this.village,
+    required this.pdf, required this.pdfName});
+
+  factory DuplicateRecord.fromJson(Map<String, dynamic> j) => DuplicateRecord(
+    id: (j['id'] as num?)?.toInt() ?? 0,
+    name: j['name'] as String? ?? '',
+    relationName: j['relation_name'] as String? ?? '',
+    epic: j['epic'] as String? ?? '',
+    serial: j['serial'] as String? ?? '',
+    page: (j['page'] as num?)?.toInt() ?? 1,
+    village: j['village'] as String? ?? '',
+    pdf: j['pdf'] as String? ?? '',
+    pdfName: j['pdf_name'] as String? ?? '',
+  );
+}
+
+class DuplicateGroup {
+  final String key;
+  final String label;
+  final String relationLabel;
+  final List<DuplicateRecord> records;
+
+  const DuplicateGroup({required this.key, required this.label,
+    required this.relationLabel, required this.records});
+
+  factory DuplicateGroup.fromJson(Map<String, dynamic> j) => DuplicateGroup(
+    key: j['key'] as String? ?? '',
+    label: j['label'] as String? ?? '',
+    relationLabel: j['relation_label'] as String? ?? '',
+    records: ((j['records'] as List?) ?? const [])
+      .map((e) => DuplicateRecord.fromJson(e as Map<String, dynamic>)).toList(),
+  );
+}
+
+class DuplicateOverview {
+  final List<DuplicateGroup> epic;
+  final List<DuplicateGroup> name;
+
+  const DuplicateOverview({required this.epic, required this.name});
+
+  factory DuplicateOverview.fromJson(Map<String, dynamic> j) => DuplicateOverview(
+    epic: ((j['epic'] as List?) ?? const [])
+      .map((e) => DuplicateGroup.fromJson(e as Map<String, dynamic>)).toList(),
+    name: ((j['name'] as List?) ?? const [])
+      .map((e) => DuplicateGroup.fromJson(e as Map<String, dynamic>)).toList(),
+  );
+}
+
 class SearchResponse {
   final List<VoterResult> results;
   final int total;

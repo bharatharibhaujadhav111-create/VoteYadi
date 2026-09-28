@@ -26,5 +26,20 @@ secret values in this file, workflow logs, commits, or screenshots.
 - One PDF is exclusively claimed by one job.
 - Infrastructure failures retry up to two times.
 - Suspicious OCR is marked `needs_review` and is not published.
+- Each PDF job runs parser tests, then checks that the PDF has enough Marathi
+  names, at least 95% serial coverage, no serial collisions, and a complete
+  serial sequence for rolls starting at 1. Suspect pages get a bilingual
+  numeric re-read; Marathi-only names are retained.
+- Repeated names or EPIC numbers are kept as separate searchable records and
+  recorded as quality warnings, not reasons to reject the PDF.
+- A job that cannot claim a PDF reports `skipped` and fails visibly; rerunning
+  an old job is not the way to retry `needs_review` documents.
 - Valid rows replace the previous PDF index in a single database transaction.
 - Existing searchable rows survive runner crashes and failed replacement runs.
+
+## Super Admin duplicate review
+
+Run `supabase/migrations/0004_admin_duplicates.sql` once in the Supabase SQL
+Editor before using the **Duplicates** tab. It groups active searchable records
+by exact EPIC and by full name plus relative's name within the same village.
+It does not merge or delete voter records.

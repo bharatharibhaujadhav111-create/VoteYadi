@@ -22,6 +22,7 @@ class AdminController extends ChangeNotifier {
   double? uploadProgress;
 
   Timer? _poll;
+  int _pollCount = 0;
 
   Future<void> init() async {
     await refresh();
@@ -34,7 +35,11 @@ class AdminController extends ChangeNotifier {
       final wasIndexing = index?.isIndexing ?? false;
       index = s;
       notifyListeners();
-      if (wasIndexing && !s.isIndexing) await refresh(silent: true);
+      // GitHub OCR updates PDF rows independently of the local index status.
+      // Refresh those rows periodically even when the index never changes.
+      if ((wasIndexing && !s.isIndexing) || ++_pollCount % 5 == 0) {
+        await refresh(silent: true);
+      }
     } catch (_) {}
   }
 

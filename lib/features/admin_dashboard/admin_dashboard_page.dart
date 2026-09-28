@@ -33,6 +33,23 @@ class _AdminView extends StatefulWidget {
 
 class _AdminViewState extends State<_AdminView> {
   final _search = TextEditingController();
+  bool _showDuplicates = false;
+  bool _showEpicMatches = true;
+  Future<DuplicateOverview>? _duplicatesFuture;
+
+  void _selectDuplicates() {
+    setState(() {
+      _showDuplicates = true;
+      _duplicatesFuture = context.read<ApiClient>().adminDuplicates();
+    });
+  }
+
+  void _refresh(AdminController c) {
+    c.refresh();
+    if (_showDuplicates) {
+      setState(() => _duplicatesFuture = context.read<ApiClient>().adminDuplicates());
+    }
+  }
 
   @override
   void dispose() {
@@ -129,12 +146,12 @@ class _AdminViewState extends State<_AdminView> {
             icon: const Icon(Icons.public_rounded, color: Colors.white70, size: 18),
             label: const Text('User site', style: TextStyle(color: Colors.white70)),
           ),
-          IconButton(tooltip: 'Refresh', onPressed: c.loading ? null : c.refresh, icon: const Icon(Icons.refresh_rounded)),
+          IconButton(tooltip: 'Refresh', onPressed: c.loading ? null : () => _refresh(c), icon: const Icon(Icons.refresh_rounded)),
           const SizedBox(width: 6),
         ],
         bottom: c.busy ? const PreferredSize(preferredSize: Size.fromHeight(3), child: LinearProgressIndicator(minHeight: 3, color: AppColors.saffron, backgroundColor: AppColors.navy)) : null,
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: _showDuplicates ? null : FloatingActionButton.extended(
         onPressed: c.busy ? null : () => _upload(c),
         backgroundColor: AppColors.saffron,
         foregroundColor: Colors.white,
@@ -153,7 +170,23 @@ class _AdminViewState extends State<_AdminView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          IndexStatusCard(
+                          Wrap(spacing: 8, children: [
+                            ChoiceChip(
+                              label: const Text('Dashboard'),
+                              avatar: const Icon(Icons.dashboard_rounded, size: 18),
+                              selected: !_showDuplicates,
+                              onSelected: (_) => setState(() => _showDuplicates = false),
+                            ),
+                            ChoiceChip(
+                              label: const Text('Duplicates'),
+                              avatar: const Icon(Icons.content_copy_rounded, size: 18),
+                              selected: _showDuplicates,
+                              onSelected: (_) => _selectDuplicates(),
+                            ),
+                          ]),
+                          const SizedBox(height: 14),
+                          if (_showDuplicates) _duplicatesCard() else ...[
+                            IndexStatusCard(
                             status: c.index,
                             busy: c.busy,
                             onRebuild: () async {
@@ -161,7 +194,7 @@ class _AdminViewState extends State<_AdminView> {
                               if (!context.mounted) return;
                               showSnack(context, err ?? 'Full index rebuild started', error: err != null);
                             },
-                          ),
+                            ),
                           const SizedBox(height: 14),
                           if (wide)
                             Row(
@@ -177,10 +210,73 @@ class _AdminViewState extends State<_AdminView> {
                             const SizedBox(height: 14),
                             _pdfCard(c),
                           ],
+                          ],
                         ],
                       ),
                     ),
                   ),
+      ),
+    );
+  }
+
+  Widget _duplicatesCard() {
+    return AppCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const SectionTitle(icon: Icons.content_copy_rounded, title: 'Duplicate review'),
+        const SizedBox(height: 8),
+        const Text('These voters remain searchable. This page only groups possible repeats; it never merges or removes records.',
+          style: TextStyle(color: AppColors.textSecondary)),
+        const SizedBox(height: 12),
+        Wrap(spacing: 8, children: [
+          ChoiceChip(label: const Text('Same EPIC'), selected: _showEpicMatches,
+            onSelected: (_) => setState(() => _showEpicMatches = true)),
+          ChoiceChip(label: const Text('Same name + relative'), selected: !_showEpicMatches,
+            onSelected: (_) => setState(() => _showEpicMatches = false)),
+        ]),
+        const SizedBox(height: 12),
+        FutureBuilder<DuplicateOverview>(
+          future: _duplicatesFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()));
+            }
+            if (snapshot.hasError) {
+              return Text('Could not load duplicates: ${snapshot.error}',
+                style: const TextStyle(color: AppColors.danger));
+            }
+            final groups = _showEpicMatches ? snapshot.data?.epic : snapshot.data?.name;
+            if (groups == null || groups.isEmpty) {
+              return const Padding(padding: EdgeInsets.all(20), child: Text('No matching records found.'));
+            }
+            return Column(children: [for (final group in groups) _duplicateGroup(group)]);
+          },
+        ),
+      ]),
+    );
+  }
+
+  Widget _duplicateGroup(DuplicateGroup group) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ExpansionTile(
+        title: Text(group.label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Text(_showEpicMatches
+          ? '${group.records.length} records with this EPIC'
+          : '${group.relationLabel} · ${group.records.first.village} · ${group.records.length} possible matches'),
+        children: [for (final record in group.records)
+          ListTile(
+            isThreeLine: true,
+            title: Text(record.name),
+            subtitle: Text('${record.relationName}\n${record.village} · EPIC ${record.epic.isEmpty ? "—" : record.epic} · Serial ${record.serial.isEmpty ? "—" : record.serial}\n${record.pdfName} · Page ${record.page}'),
+            trailing: IconButton(
+              tooltip: 'Open PDF at this voter',
+              icon: const Icon(Icons.open_in_new_rounded),
+              onPressed: () => context.read<PdfViewer>().open(context, record.pdf,
+                page: record.page, voterId: record.id),
+            ),
+          ),
+        ],
       ),
     );
   }

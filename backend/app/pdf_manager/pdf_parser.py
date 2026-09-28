@@ -125,7 +125,8 @@ def ocr_language_for(text: str, *, scanned: bool = False) -> str:
             return config.OCR_LANG or "eng"
         # On Marathi voter cards the English model can turn Devanagari names
         # into plausible-looking Latin fragments ("AGA", "agar", "Goats").
-        # The Marathi model still reads the numeric serials and EPIC headers.
+        # The Marathi model usually reads the numeric headers too. Suspect
+        # serials are verified with a second bilingual pass after parsing.
         return config.OCR_LANG_DEV
     prof = mar.page_profile(text)
     if prof["script"] == "latin" and looks_english(text):
@@ -686,6 +687,68 @@ def _parse_page_job(args: tuple[str, int]) -> tuple[int, str, bool, list[dict]]:
         return page_index + 1, result.part, used_ocr, [r.to_row() for r in result.records]
 
 
+def _apply_verified_page_serials(rows: list[dict], other: list[VoterRecord], first_serial: int) -> bool:
+    """Transfer only independently verified serials, never bilingual names."""
+    expected = set(range(first_serial, first_serial + len(rows)))
+    try:
+        serials = [int(record.serial) for record in other]
+    except (ValueError, TypeError):
+        return False
+    if len(set(serials)) != len(serials) or not set(serials) <= expected:
+        return False
+
+    # Fast path: both passes found every card in the same order. Do not move
+    # an already-correct number to another card.
+    if len(other) == len(rows) and set(serials) == expected:
+        aligned = True
+        for row, serial in zip(rows, serials):
+            try:
+                old = int(row["serial"])
+            except (ValueError, TypeError):
+                continue
+            if old in expected and old != serial:
+                aligned = False
+                break
+        if aligned:
+            for row, serial in zip(rows, serials):
+                row["serial"] = str(serial)
+            return True
+
+    # A bilingual pass can miss one Marathi name while reading all other
+    # serials correctly. Match those cards by unique full name, then infer the
+    # sole remaining number only when exactly one card and one number remain.
+    if len(other) != len(rows) - 1 or len(set(serials)) != len(rows) - 1:
+        return False
+    original_names = [normalize(str(row.get("name") or "")) for row in rows]
+    other_names = [normalize(record.name) for record in other]
+    if (not all(original_names) or not all(other_names)
+            or len(set(original_names)) != len(rows)
+            or len(set(other_names)) != len(other)
+            or not set(other_names) <= set(original_names)):
+        return False
+    by_name = dict(zip(other_names, serials))
+    missing = expected - set(serials)
+    if len(missing) != 1:
+        return False
+    inferred = missing.pop()
+    for row, name in zip(rows, original_names):
+        row["serial"] = str(by_name.get(name, inferred))
+    return True
+
+
+def _recover_page_serials(path: Path, page_no: int, rows: list[dict], first_serial: int) -> bool:
+    """Re-read suspect card numbers with both models, retaining Marathi names."""
+    with pymupdf.open(path) as doc:
+        bilingual = _ocr_lines(doc[page_no - 1], lang=f'{config.OCR_LANG_DEV}+{config.OCR_LANG or "eng"}')
+    if not bilingual:
+        return False
+    other = parse_page_text(order_by_columns(bilingual), page_no).records
+    if not _apply_verified_page_serials(rows, other, first_serial):
+        return False
+    log.info("Recovered %d serials on page %d using bilingual OCR", len(rows), page_no)
+    return True
+
+
 def parse_pdf(path: str | Path, *, workers: int = 1, progress: "Callable[[int, int], None] | None" = None) -> PdfParseResult:
     """Extract voter records from a PDF.
 
@@ -728,6 +791,20 @@ def parse_pdf(path: str | Path, *, workers: int = 1, progress: "Callable[[int, i
                     progress(n + 1, page_count)
 
     results.sort(key=lambda r: r[0])
+    # Marathi-only OCR is best for names, but on some scans it confuses the
+    # hundreds digit (955 -> 555) for a whole page. Re-read only pages whose
+    # serials disagree with their position in the roll, never all pages.
+    next_serial = 1
+    for page_no, _, used_ocr, rows in results:
+        if used_ocr and rows:
+            expected = set(range(next_serial, next_serial + len(rows)))
+            try:
+                actual = {int(row["serial"]) for row in rows}
+            except (ValueError, TypeError):
+                actual = set()
+            if actual != expected:
+                _recover_page_serials(path, page_no, rows, next_serial)
+        next_serial += len(rows)
     records: list[VoterRecord] = []
     ocr_pages = 0
     part_hint = ""

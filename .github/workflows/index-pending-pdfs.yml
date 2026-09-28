@@ -84,6 +84,11 @@ jobs:
           tesseract --list-langs
       - name: Install parser dependencies
         run: python -m pip install --disable-pip-version-check -r backend/requirements-ocr-lock.txt
+      - name: Check OCR parser and publication safeguards
+        run: |
+          python backend/tests/test_marathi.py
+          python backend/tests/test_serial_recovery.py
+          python backend/tests/test_cloud_quality.py
       - name: OCR, validate, and atomically publish
         shell: bash
         run: |
@@ -106,6 +111,12 @@ jobs:
               echo "### PDF needs review" >> "$GITHUB_STEP_SUMMARY"
               echo "${{ matrix.name }} failed quality checks. Check this job's OCR output and the Super Admin status." >> "$GITHUB_STEP_SUMMARY"
               exit 2
+            fi
+            if [ "$final_code" -eq 3 ]; then
+              echo "Document was not claimable; no OCR or publication occurred."
+              echo "### PDF was skipped, not indexed" >> "$GITHUB_STEP_SUMMARY"
+              echo "${{ matrix.name }} could not be claimed. Check its current Super Admin status." >> "$GITHUB_STEP_SUMMARY"
+              exit 3
             fi
             if [ "$attempt" -lt 3 ]; then
               echo "Temporary failure; retrying after $((attempt * 20)) seconds."
