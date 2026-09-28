@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 
-/// Design tokens taken from the reference design (tricolor palette).
+/// Calm, trustworthy palette used across the public and admin interfaces.
 class AppColors {
   AppColors._();
 
-  static const saffron = Color(0xFFF26522);
-  static const saffronDark = Color(0xFFD9541A);
-  static const saffronLight = Color(0xFFFFF1E8);
-  static const green = Color(0xFF0B753B);
-  static const greenLight = Color(0xFFE6F4EC);
+  // Legacy token names are retained to keep existing widgets stable while
+  // replacing the visually dominant orange palette with emerald.
+  static const saffron = Color(0xFF15803D);
+  static const saffronDark = Color(0xFF166534);
+  static const saffronLight = Color(0xFFF0FDF4);
+  static const green = Color(0xFF15803D);
+  static const greenDark = Color(0xFF166534);
+  static const greenLight = Color(0xFFF0FDF4);
+  static const whatsapp = Color(0xFF25D366);
   static const navy = Color(0xFF05244C);
   static const navyText = Color(0xFF0D2B5B);
   static const blue = Color(0xFF1E63C8);
@@ -29,8 +33,8 @@ class AppTheme {
     final base = ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(
-        seedColor: AppColors.saffron,
-        primary: AppColors.saffron,
+        seedColor: AppColors.green,
+        primary: AppColors.green,
         secondary: AppColors.green,
         surface: AppColors.surface,
       ),
@@ -54,7 +58,10 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.border),
@@ -75,7 +82,9 @@ class AppTheme {
           foregroundColor: Colors.white,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
         ),
       ),
@@ -83,7 +92,9 @@ class AppTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.navyText,
           side: const BorderSide(color: AppColors.border),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         ),
       ),
@@ -97,7 +108,10 @@ class AppTheme {
         labelStyle: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       ),
-      dividerTheme: const DividerThemeData(color: AppColors.border, thickness: 1),
+      dividerTheme: const DividerThemeData(
+        color: AppColors.border,
+        thickness: 1,
+      ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

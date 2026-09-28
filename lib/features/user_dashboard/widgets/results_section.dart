@@ -65,20 +65,33 @@ class ResultsSection extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.greenLight,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.green.withValues(alpha: 0.25)),
+              border: Border.all(
+                color: AppColors.green.withValues(alpha: 0.25),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.translate_rounded, size: 19, color: AppColors.green),
+                const Icon(
+                  Icons.translate_rounded,
+                  size: 19,
+                  color: AppColors.green,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text.rich(
                     TextSpan(
                       children: [
-                        const TextSpan(text: 'इंग्रजी नावाचा मराठी शोध: ', style: TextStyle(color: AppColors.textSecondary)),
+                        const TextSpan(
+                          text: 'इंग्रजी नावाचा मराठी शोध: ',
+                          style: TextStyle(color: AppColors.textSecondary),
+                        ),
                         TextSpan(
                           text: parsed['transliterated'] as String,
-                          style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.green, fontSize: 15),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.green,
+                            fontSize: 15,
+                          ),
                         ),
                       ],
                     ),
@@ -201,20 +214,39 @@ class _NoResults extends StatelessWidget {
               Container(
                 width: 44,
                 height: 44,
-                decoration: BoxDecoration(color: const Color(0xFFFDECEC), borderRadius: BorderRadius.circular(12)),
-                child: const Icon(Icons.person_off_rounded, color: AppColors.danger, size: 24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFDECEC),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.person_off_rounded,
+                  color: AppColors.danger,
+                  size: 24,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('या यादीमध्ये नाव सापडले नाही', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: AppColors.navyText)),
+                    const Text(
+                      'या यादीमध्ये नाव सापडले नाही',
+                      style: TextStyle(
+                        fontSize: 16.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.navyText,
+                      ),
+                    ),
                     Text(
-                      village.isEmpty ? '"${controller.query}"  ·  सर्व गावे' : '"${controller.query}"  ·  $village',
+                      village.isEmpty
+                          ? '"${controller.query}"  ·  सर्व गावे'
+                          : '"${controller.query}"  ·  $village',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                   ],
                 ),
@@ -237,7 +269,12 @@ class _NoResults extends StatelessWidget {
                 Expanded(
                   child: Text(
                     'काळजी करू नका. या PDF मध्ये नाव न सापडणे म्हणजे तुमचे नाव मतदार यादीतून निश्चितपणे वगळले आहे असे नाही.',
-                    style: TextStyle(fontSize: 12.5, color: AppColors.green, fontWeight: FontWeight.w600, height: 1.4),
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.green,
+                      fontWeight: FontWeight.w600,
+                      height: 1.4,
+                    ),
                   ),
                 ),
               ],
@@ -245,7 +282,14 @@ class _NoResults extends StatelessWidget {
           ),
           if (response.suggestions.isNotEmpty) ...[
             const SizedBox(height: 14),
-            const Text('तुम्हाला हे म्हणायचे होते का?', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textSecondary, fontSize: 13)),
+            const Text(
+              'तुम्हाला हे म्हणायचे होते का?',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary,
+                fontSize: 13,
+              ),
+            ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 6,
@@ -253,11 +297,19 @@ class _NoResults extends StatelessWidget {
               children: [
                 for (final s in response.suggestions)
                   ActionChip(
-                    avatar: const Icon(Icons.person_search_rounded, size: 16, color: AppColors.saffronDark),
+                    avatar: const Icon(
+                      Icons.person_search_rounded,
+                      size: 16,
+                      color: AppColors.saffronDark,
+                    ),
                     label: Text(s),
                     backgroundColor: AppColors.saffronLight,
                     side: const BorderSide(color: Color(0xFFFFD3B8)),
-                    labelStyle: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.saffronDark, fontSize: 13),
+                    labelStyle: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.saffronDark,
+                      fontSize: 13,
+                    ),
                     onPressed: () => controller.search(s),
                   ),
               ],
@@ -277,26 +329,72 @@ class _NoResults extends StatelessWidget {
           const SizedBox(height: 16),
           const Divider(height: 1),
           const SizedBox(height: 14),
-          const Text('पुढील प्रक्रिया', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.navyText)),
+          const Text(
+            'पुढील प्रक्रिया',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: AppColors.navyText,
+            ),
+          ),
           const SizedBox(height: 10),
-          const _Step(n: 1, icon: Icons.spellcheck_rounded, title: 'नावाच्या वेगवेगळ्या spelling ने पुन्हा शोधा', sub: 'उदा. Vijay / Vijai, Jadhav / Jadav. फक्त पहिले नाव किंवा आडनाव टाकूनही पहा.'),
-          const _Step(n: 2, icon: Icons.verified_user_rounded, title: 'अधिकृत मतदार यादीमध्ये नाव तपासा', sub: 'ECI च्या अधिकृत शोध सेवेवर नाव / EPIC क्रमांकाने तपासा.'),
-          const _Step(n: 3, icon: Icons.note_add_rounded, title: 'नाव नसल्यास Form 6 द्वारे अर्ज करा', sub: 'नवीन नाव समाविष्ट करण्यासाठी ऑनलाइन किंवा BLO कडे Form 6 भरा. माहिती चुकीची असल्यास Form 8.'),
-          const _Step(n: 4, icon: Icons.location_city_rounded, title: 'BLO / ERO कार्यालयाशी संपर्क साधा', sub: 'तुमच्या बूथचे BLO पडताळणीसाठी मदत करतील.'),
-          const _Step(n: 5, icon: Icons.support_agent_rounded, title: 'SIR मदतीसाठी 1950 वर संपर्क साधा', sub: 'मतदार हेल्पलाइन (टोल-फ्री).', last: true),
+          const _Step(
+            n: 1,
+            icon: Icons.spellcheck_rounded,
+            title: 'नावाच्या वेगवेगळ्या spelling ने पुन्हा शोधा',
+            sub:
+                'उदा. Vijay / Vijai, Jadhav / Jadav. फक्त पहिले नाव किंवा आडनाव टाकूनही पहा.',
+          ),
+          const _Step(
+            n: 2,
+            icon: Icons.verified_user_rounded,
+            title: 'अधिकृत मतदार यादीमध्ये नाव तपासा',
+            sub: 'ECI च्या अधिकृत शोध सेवेवर नाव / EPIC क्रमांकाने तपासा.',
+          ),
+          const _Step(
+            n: 3,
+            icon: Icons.note_add_rounded,
+            title: 'नाव नसल्यास Form 6 द्वारे अर्ज करा',
+            sub:
+                'नवीन नाव समाविष्ट करण्यासाठी ऑनलाइन किंवा BLO कडे Form 6 भरा. माहिती चुकीची असल्यास Form 8.',
+          ),
+          const _Step(
+            n: 4,
+            icon: Icons.location_city_rounded,
+            title: 'BLO / ERO कार्यालयाशी संपर्क साधा',
+            sub: 'तुमच्या बूथचे BLO पडताळणीसाठी मदत करतील.',
+          ),
+          const _Step(
+            n: 5,
+            icon: Icons.support_agent_rounded,
+            title: 'SIR मदतीसाठी 1950 वर संपर्क साधा',
+            sub: 'मतदार हेल्पलाइन (टोल-फ्री).',
+            last: true,
+          ),
           const SizedBox(height: 14),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
               ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.green, padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.green,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                ),
                 onPressed: () => _open(context, _eciSearch),
                 icon: const Icon(Icons.verified_user_rounded, size: 18),
                 label: const Text('अधिकृत यादीत नाव तपासा'),
               ),
               ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12)),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                ),
                 onPressed: () => _open(context, _form6),
                 icon: const Icon(Icons.note_add_rounded, size: 18),
                 label: const Text('Form 6 भरा'),
@@ -319,13 +417,25 @@ class _NoResults extends StatelessWidget {
   }
 
   Future<void> _open(BuildContext context, Uri uri) async {
-    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication, webOnlyWindowName: '_blank');
-    if (!ok && context.mounted) showSnack(context, 'लिंक उघडता आली नाही', error: true);
+    final ok = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+      webOnlyWindowName: '_blank',
+    );
+    if (!ok && context.mounted) {
+      showSnack(context, 'लिंक उघडता आली नाही', error: true);
+    }
   }
 }
 
 class _Step extends StatelessWidget {
-  const _Step({required this.n, required this.icon, required this.title, required this.sub, this.last = false});
+  const _Step({
+    required this.n,
+    required this.icon,
+    required this.title,
+    required this.sub,
+    this.last = false,
+  });
   final int n;
   final IconData icon;
   final String title;
@@ -343,8 +453,18 @@ class _Step extends StatelessWidget {
               width: 28,
               height: 28,
               alignment: Alignment.center,
-              decoration: BoxDecoration(color: n.isOdd ? AppColors.saffron : AppColors.green, borderRadius: BorderRadius.circular(14)),
-              child: Text('$n', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
+              decoration: BoxDecoration(
+                color: n.isOdd ? AppColors.saffron : AppColors.green,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                '$n',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                ),
+              ),
             ),
             if (!last) Container(width: 2, height: 22, color: AppColors.border),
           ],
@@ -360,10 +480,26 @@ class _Step extends StatelessWidget {
                   children: [
                     Icon(icon, size: 15, color: AppColors.textSecondary),
                     const SizedBox(width: 6),
-                    Expanded(child: Text(title, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: AppColors.navyText))),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.navyText,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-                Text(sub, style: const TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.35)),
+                Text(
+                  sub,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textMuted,
+                    height: 1.35,
+                  ),
+                ),
               ],
             ),
           ),
@@ -552,6 +688,15 @@ class ResultCard extends StatelessWidget {
                             icon: const Icon(Icons.download_rounded, size: 17),
                             label: const Text('डाउनलोड'),
                           ),
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.greenDark,
+                              side: const BorderSide(color: AppColors.whatsapp),
+                            ),
+                            onPressed: () => _shareOnWhatsApp(context, r),
+                            icon: const Icon(Icons.chat_rounded, size: 17),
+                            label: const Text('WhatsApp वर शेअर करा'),
+                          ),
                         ],
                       ),
                     ],
@@ -573,6 +718,35 @@ class ResultCard extends StatelessWidget {
         return 'स्त्री';
       default:
         return g;
+    }
+  }
+
+  static Future<void> _shareOnWhatsApp(
+    BuildContext context,
+    VoterResult voter,
+  ) async {
+    final details = <String>[
+      'मतदार माहिती',
+      '',
+      'नाव: ${voter.name}',
+      if (voter.relationName.isNotEmpty)
+        '${voter.relationLabel}: ${voter.relationName}',
+      if (voter.village.isNotEmpty) 'गाव: ${voter.village}',
+      if (voter.serial.isNotEmpty) 'अनुक्रमांक: ${voter.serial}',
+      if (voter.part.isNotEmpty) 'भाग / बूथ क्रमांक: ${voter.part}',
+      if (voter.epic.isNotEmpty) 'मतदार ओळखपत्र: ${voter.epic}',
+      if (voter.age.isNotEmpty) 'वय: ${voter.age}',
+      if (voter.gender.isNotEmpty) 'लिंग: ${_genderMr(voter.gender)}',
+      'PDF पान: ${voter.page}',
+    ].join('\n');
+    final uri = Uri.https('wa.me', '/', {'text': details});
+    final opened = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+      webOnlyWindowName: '_blank',
+    );
+    if (!opened && context.mounted) {
+      showSnack(context, 'WhatsApp उघडता आले नाही', error: true);
     }
   }
 }
