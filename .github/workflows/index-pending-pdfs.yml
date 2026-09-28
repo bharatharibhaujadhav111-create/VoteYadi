@@ -2,6 +2,15 @@ name: Index pending voter PDFs
 
 on:
   workflow_dispatch:
+  # Parser/quality fixes should immediately retry PDFs that an administrator
+  # has queued, without waiting for GitHub's best-effort cron scheduler.
+  push:
+    branches: [main]
+    paths:
+      - "backend/app/pdf_manager/**"
+      - "backend/tools/sync_cloud.py"
+      - "backend/tests/**"
+      - ".github/workflows/index-pending-pdfs.yml"
   schedule:
     - cron: "*/15 * * * *"
 
