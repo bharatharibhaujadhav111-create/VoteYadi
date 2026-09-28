@@ -135,16 +135,20 @@ class _AdminViewState extends State<_AdminView> {
         automaticallyImplyLeading: false,
         backgroundColor: AppColors.navy,
         foregroundColor: Colors.white,
-        title: const Row(children: [
-          Icon(Icons.admin_panel_settings_rounded),
-          SizedBox(width: 8),
-          Text('Voter Finder · Admin', style: TextStyle(fontWeight: FontWeight.w800)),
+        title: Row(children: [
+          const Icon(Icons.admin_panel_settings_rounded),
+          const SizedBox(width: 8),
+          Text(wide ? 'Voter Finder · Admin' : 'Admin', style: const TextStyle(fontWeight: FontWeight.w800)),
         ]),
         actions: [
-          TextButton.icon(
+          if (wide) TextButton.icon(
             onPressed: () => Navigator.of(context).pushReplacementNamed('/'),
             icon: const Icon(Icons.public_rounded, color: Colors.white70, size: 18),
             label: const Text('User site', style: TextStyle(color: Colors.white70)),
+          ) else IconButton(
+            tooltip: 'User site',
+            onPressed: () => Navigator.of(context).pushReplacementNamed('/'),
+            icon: const Icon(Icons.public_rounded, color: Colors.white70),
           ),
           IconButton(tooltip: 'Refresh', onPressed: c.loading ? null : () => _refresh(c), icon: const Icon(Icons.refresh_rounded)),
           const SizedBox(width: 6),
@@ -258,6 +262,7 @@ class _AdminViewState extends State<_AdminView> {
 
   Widget _duplicateGroup(DuplicateGroup group) {
     return Card(
+      key: ValueKey('${_showEpicMatches ? 'epic' : 'name'}:${group.key}'),
       margin: const EdgeInsets.only(bottom: 8),
       child: ExpansionTile(
         title: Text(group.label, style: const TextStyle(fontWeight: FontWeight.w700)),
