@@ -145,6 +145,39 @@ check("same-line Marathi name fragments rejoined", len(split_records), 3)
 check("complete split Marathi name retained", split_records[0].name, "शबाना जाकीरहुसेन सय्यद")
 check("split-name serial retained", split_records[0].serial, "481")
 
+# A damaged relation label can look like a name label and be indented within
+# the first card. It must not create a false fourth column and corrupt every
+# spatially inferred serial on the page.
+shifted_label_lines = [
+    (208.0, 112.0, "331"),
+    (839.0, 112.0, "332"),
+    (1473.0, 112.0, "333"),
+    (62.0, 152.0, "नाव: पहिले नाव"),
+    (696.0, 152.0, "नाव: दुसरे नाव"),
+    (1329.0, 152.0, "नाव: तिसरे नाव"),
+    (208.0, 377.0, "334"),
+    (839.0, 377.0, "335"),
+    (1473.0, 377.0, "336"),
+    (108.0, 417.0, "नाव: चौथे नाव"),
+    (696.0, 417.0, "नाव: पाचवे नाव"),
+    (1329.0, 417.0, "नाव: सहावे नाव"),
+]
+shifted_records = parse_page_text(order_by_columns(shifted_label_lines), 14, "").records
+check("indented label stays in the three-column grid", len(shifted_records), 6)
+check("indented label preserves serial sequence", [r.serial for r in shifted_records],
+      ["331", "334", "332", "335", "333", "336"])
+
+damaged_relation = parse_page_text([
+    "403",
+    "नाव * १ हसेन महमद मुजाफीर महमद",
+    "ांचे नाव: महमद मुजाफीर महमद",
+], 16, "").records
+check("truncated relation label does not create a duplicate voter", len(damaged_relation), 1)
+check("numeric OCR debris removed from voter name", damaged_relation[0].name,
+      "हसेन महमद मुजाफीर महमद")
+check("truncated relation value retained", damaged_relation[0].relation_name,
+      "महमद मुजाफीर महमद")
+
 print("\n== romanisation quality ==")
 for deva, want in [("जाधव", "jadhav"), ("भारत", "bharat"), ("शिंदे", "shinde"),
                    ("काळे", "kale"), ("पाटील", "patil"), ("मोरे", "more")]:

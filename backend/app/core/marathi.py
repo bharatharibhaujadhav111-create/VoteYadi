@@ -105,6 +105,8 @@ def clean_name(text: str) -> str:
         bare = tok.strip(" .,:;-|/_()[]'\"")
         if not bare:
             continue
+        if bare.isdigit():
+            continue  # serial/house OCR leaked into the person's name
         folded = dev.fold(bare)
         if folded in FIELD_LABEL_SET or folded in HONORIFIC_FOLDED or bare.lower() in EN_FIELD_LABELS:
             continue

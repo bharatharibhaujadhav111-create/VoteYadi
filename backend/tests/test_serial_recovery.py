@@ -10,6 +10,7 @@ from backend.app.pdf_manager.pdf_parser import (
     VoterRecord,
     _apply_digit_verified_serials,
     _apply_verified_page_serials,
+    _card_record_from_text,
     _merge_complete_page,
     _neighbour_expected,
     _recover_missing_sequence_serials,
@@ -88,6 +89,29 @@ page_results = [
     (14, "", True, [{"serial": "302"}]),
 ]
 assert _neighbour_expected(page_results, 1) == {301}
+
+last_page_results = [
+    (35, "", True, [{"serial": "954"}]),
+    (36, "", True, [{"serial": ""}]),
+    (37, "", True, []),
+]
+assert _neighbour_expected(last_page_results, 1) == {955}
+
+cropped = _card_record_from_text(
+    """| 112 | ISF7014244
+नाच : हुसेन उ अब्बास सय्यद
+: अब्बास इब्राहिम सय्यद
+घर क्रमांक :
+वय : 71 लिंग : पुरुष""",
+    serial=112,
+    page_no=6,
+    epic_prefix="ISF",
+)
+assert cropped is not None
+assert cropped.serial == "112"
+assert cropped.name == "हुसेन अब्बास सय्यद"
+assert cropped.relation_name == "अब्बास इब्राहिम सय्यद"
+assert cropped.age == "71"
 
 # Digits-only OCR must independently confirm both lone-card and full-page fixes.
 lone = [{"serial": ""}]

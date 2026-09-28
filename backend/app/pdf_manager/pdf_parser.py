@@ -56,13 +56,13 @@ DEV_NAME = r"[\u0900-\u097f][\u0900-\u097f\s.\-']*"
 #  नाव : रामचंद्र जाधव  |  मतदाराचे नाव : …   (but never "वडिलांचे नाव : …", which is
 #  the relative's name and belongs to the *previous* voter box)
 DEV_NAME_RE = re.compile(
-    rf"^\s*(?!वडिल|वडील|वडिलां|पित|पती|आई|माते|माता|पत्नी|पालक|इतर|अन्य|जनक|बाप)"
+    rf"^\s*(?!वडिल|वडील|वडिलां|पित|पती|आई|माते|माता|पत्नी|पालक|इतर|अन्य|जनक|बाप|ांचे|चे)"
     rf"[\u0900-\u097f]*\s*(?:नाव|नाम)\s*[:：\-–]?\s*(.+?)\s*$"
 )
 #  वडिलांचे नाव : भारत जाधव / पतीचे नाव : … / आईचे नाव : …
 DEV_RELATION_RE = re.compile(
     rf"^\s*(वडिलांचे|वडिलाचे|वडिल|वडील|पित्याचे|पिताचे|पिता|जनकाचे|बापाचे|पतीचे|पतीचा|पती|"
-    rf"आईचे|आईचा|आई|मातेचे|माता|पत्नीचे|पत्नी|पालकाचे|पालक|इतराचे|इतर|अन्य)"
+    rf"आईचे|आईचा|आई|मातेचे|माता|पत्नीचे|पत्नी|पालकाचे|पालक|इतराचे|इतर|अन्य|ांचे|चे)"
     rf"\s*(?:नाव|नाम)?\s*[:：\-–]?\s*(.+?)\s*$"
 )
 DEV_HOUSE_RE = re.compile(r"(?:घर|गृह)\s*(?:क्रमांक|नं|नंबर|नो)?\s*[:：\-–]?\s*([^\s].*?)(?=\s*(?:वय|लिंग|वर्ष)\b|$)")
@@ -189,7 +189,11 @@ class PdfParseResult:
 # ----------------------------------------------------------------------------
 Line = tuple[float, float, str]  # (x0, y0, text) in PDF points
 
-COLUMN_GAP_PT = 28.0  # lines whose left edge differ by more than this start a new column
+# OCR can indent a damaged Marathi label by 40-60 points inside its voter card.
+# Real columns in the ECI three-column layout are hundreds of points apart, so
+# a wider clustering tolerance prevents a stray label from inventing a fourth
+# column without merging genuine columns.
+COLUMN_GAP_PT = 90.0
 
 
 def _page_lines(page: pymupdf.Page) -> list[Line]:
@@ -917,6 +921,128 @@ def _apply_digit_verified_serials(rows: list[dict], expected: set[int], confirme
     return False
 
 
+def _card_record_from_text(
+    text: str, *, serial: int, page_no: int, epic_prefix: str = ""
+) -> VoterRecord | None:
+    """Parse one high-resolution voter-card crop.
+
+    This intentionally accepts only a small set of common Marathi OCR label
+    substitutions. It is used solely after neighbouring pages prove that one
+    card is absent from an otherwise complete page.
+    """
+    lines = [re.sub(r"^[|\[\] ]+", "", line).strip() for line in text.splitlines()]
+    name = relation = relation_type = house = age = gender = epic = ""
+    name_index = -1
+    tolerant_name = re.compile(r"^(?:नाव|नांव|नाम|नाच|नाल)\s*[:：!\-–*]?\s*(.+)$")
+    for index, line in enumerate(lines):
+        if not line:
+            continue
+        epic_match = EPIC_RE.search(line.upper())
+        if epic_match:
+            epic = epic_match.group(1).replace(" ", "").replace("/", "")
+        elif not epic and epic_prefix:
+            digits = re.search(r"(?<!\d)(\d{7})(?!\d)", to_ascii_digits(line))
+            if digits:
+                epic = epic_prefix + digits.group(1)
+        match = tolerant_name.match(line)
+        if match and not name:
+            name = mar.clean_name(_clean(match.group(1)))
+            name_index = index
+            continue
+        match = DEV_RELATION_RE.match(line)
+        if match and not relation:
+            relation_type = mar.relation_type_of(match.group(1)) or match.group(1)
+            relation = mar.clean_name(_clean(match.group(2)))
+        elif name and not relation and index == name_index + 1 and line.startswith(":"):
+            relation = mar.clean_name(_clean(line.lstrip(":： ")))
+        house_match = DEV_HOUSE_RE.search(line)
+        if house_match and not house:
+            house = _clean(house_match.group(1))
+        age_match = DEV_AGE_RE.search(line)
+        if age_match and not age:
+            age = to_ascii_digits(age_match.group(1))
+        gender_match = DEV_GENDER_RE.search(line)
+        if gender_match and not gender:
+            raw_gender = gender_match.group(1)
+            gender = mar.GENDER_MAP.get(raw_gender, raw_gender)
+    if len(re.findall(r"[\u0900-\u097f]+", name)) < 2:
+        return None
+    return VoterRecord(
+        name=name, relation_name=relation, relation_type=relation_type,
+        epic=epic, serial=str(serial), house=house, age=age, gender=gender,
+        page=page_no,
+    )
+
+
+def _recover_single_missing_card(
+    page: pymupdf.Page,
+    page_no: int,
+    rows: list[dict],
+    expected: set[int],
+    anchors: list[Line],
+) -> bool:
+    """Recover one omitted card from a tightly cropped high-resolution OCR pass."""
+    actual = _numeric_serials(rows)
+    missing = expected - set(actual)
+    if (len(missing) != 1 or len(rows) + 1 != len(expected)
+            or len(actual) != len(rows) or len(actual) != len(set(actual))):
+        return False
+    serial = next(iter(missing))
+    serial_anchors = []
+    for x, y, value in anchors:
+        if not DEV_SERIAL_RE.fullmatch(value.strip()):
+            continue
+        try:
+            if int(to_ascii_digits(value.strip())) == serial:
+                serial_anchors.append((x, y))
+        except ValueError:
+            pass
+    if len(serial_anchors) != 1:
+        return False
+
+    try:
+        import pytesseract  # noqa: WPS433
+        from PIL import Image
+    except Exception:  # pragma: no cover
+        return False
+    _configure_tesseract(pytesseract)
+    os.environ.setdefault("OMP_THREAD_LIMIT", "1")
+    x, y = serial_anchors[0]
+    column_width = page.rect.width / 3
+    column = max(0, min(2, int(x / column_width)))
+    clip = pymupdf.Rect(
+        column * column_width + 5,
+        max(0, y - 30),
+        min(page.rect.width, (column + 1) * column_width - 5),
+        min(page.rect.height, y + 235),
+    )
+    pix = page.get_pixmap(dpi=600, colorspace=pymupdf.csGRAY, clip=clip)
+    image = Image.frombytes("L", (pix.width, pix.height), pix.samples)
+    threshold = image.point(lambda pixel: 0 if pixel < 190 else 255)
+    try:
+        text = pytesseract.image_to_string(
+            threshold,
+            lang=f'{config.OCR_LANG_DEV}+{config.OCR_LANG or "eng"}',
+            config="--psm 6",
+        )
+    except Exception as exc:  # pragma: no cover
+        log.debug("card OCR failed on page %s serial %s: %s", page_no, serial, exc)
+        return False
+    prefixes = Counter()
+    for _, _, value in anchors:
+        match = EPIC_RE.search(value.upper())
+        if match:
+            compact = match.group(1).replace(" ", "").replace("/", "")
+            if re.fullmatch(r"[A-Z]{3}\d{7}", compact):
+                prefixes[compact[:3]] += 1
+    prefix = prefixes.most_common(1)[0][0] if prefixes else ""
+    record = _card_record_from_text(text, serial=serial, page_no=page_no, epic_prefix=prefix)
+    if record is None:
+        return False
+    rows.append(record.to_row())
+    return True
+
+
 def _recover_page_serials(path: Path, page_no: int, rows: list[dict], expected: set[int]) -> bool:
     """Recover a suspect page using layout and digit passes plus neighbour bounds."""
     with pymupdf.open(path) as doc:
@@ -931,6 +1057,9 @@ def _recover_page_serials(path: Path, page_no: int, rows: list[dict], expected: 
         if (expected and len(expected) == len(rows)
                 and _apply_verified_page_serials(rows, other, min(expected))):
             log.info("Recovered page %d serials by matching bilingual OCR names", page_no)
+            return True
+        if _recover_single_missing_card(page, page_no, rows, expected, bilingual):
+            log.info("Recovered one missing voter card on page %d", page_no)
             return True
 
         confirmed = _digit_candidates(page, bilingual, expected)
@@ -956,9 +1085,17 @@ def _neighbour_expected(results: list[tuple[int, str, bool, list[dict]]], index:
         if values:
             following = min(values)
             break
-    if previous is None or following is None or following <= previous + 1:
+    row_count = len(results[index][3])
+    if previous is not None and following is not None:
+        if following <= previous + 1:
+            return set()
+        expected = set(range(previous + 1, following))
+    elif previous is not None and row_count:
+        expected = set(range(previous + 1, previous + row_count + 1))
+    elif following is not None and row_count:
+        expected = set(range(following - row_count, following))
+    else:
         return set()
-    expected = set(range(previous + 1, following))
     # Electoral pages contain at most about 30 cards. A much larger interval
     # is an official gap or an untrusted neighbour, not safe repair evidence.
     return expected if len(expected) <= 40 else set()
@@ -1067,10 +1204,6 @@ def parse_pdf(
             if (len(actual) != len(rows) or len(actual) != len(set(actual))
                     or set(actual) != expected or len(rows) != len(expected)):
                 _recover_page_serials(path, page_no, rows, expected)
-        all_rows = [row for _, _, _, page_rows in results for row in page_rows]
-        repaired = _recover_missing_sequence_serials(all_rows)
-        if repaired:
-            log.info("Recovered %d serials from the complete roll sequence", repaired)
     records: list[VoterRecord] = []
     ocr_pages = 0
     part_hint = ""
