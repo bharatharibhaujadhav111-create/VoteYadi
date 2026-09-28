@@ -365,7 +365,19 @@ async function handle(request, env) {
 
   if (request.method === "GET" && p === "/api/admin/duplicates") {
     const { body } = await db(env, "rpc/admin_duplicate_voters", { method: "POST", body: "{}" });
-    return json(body || { epic: [], name: [] });
+    let cross = { same_relative: [], different_relative: [], setup_required: false };
+    try {
+      const { body: crossBody } = await db(env, "rpc/admin_cross_village_duplicates", { method: "POST", body: "{}" });
+      cross = { ...cross, ...crossBody };
+    } catch (error) {
+      // Keep the existing review available while migration 0005 is being applied.
+      if (/PGRST202|Could not find the function/i.test(String(error))) {
+        cross.setup_required = true;
+      } else {
+        throw error;
+      }
+    }
+    return json({ ...(body || { epic: [], name: [] }), ...cross });
   }
 
   if (request.method === "POST" && p === "/api/admin/pdfs/upload") {

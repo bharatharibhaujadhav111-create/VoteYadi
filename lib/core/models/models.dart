@@ -37,22 +37,22 @@ class VoterResult {
   });
 
   factory VoterResult.fromJson(Map<String, dynamic> j) => VoterResult(
-        id: (j['id'] as num?)?.toInt() ?? 0,
-        name: j['name'] as String? ?? '',
-        relationName: j['relation_name'] as String? ?? '',
-        relationType: j['relation_type'] as String? ?? '',
-        epic: j['epic'] as String? ?? '',
-        serial: j['serial'] as String? ?? '',
-        part: j['part'] as String? ?? '',
-        house: j['house'] as String? ?? '',
-        age: j['age'] as String? ?? '',
-        gender: j['gender'] as String? ?? '',
-        page: (j['page'] as num?)?.toInt() ?? 1,
-        pdf: j['pdf'] as String? ?? '',
-        pdfName: j['pdf_name'] as String? ?? (j['pdf'] as String? ?? ''),
-        village: j['village'] as String? ?? '',
-        score: (j['score'] as num?)?.toDouble() ?? 0,
-      );
+    id: (j['id'] as num?)?.toInt() ?? 0,
+    name: j['name'] as String? ?? '',
+    relationName: j['relation_name'] as String? ?? '',
+    relationType: j['relation_type'] as String? ?? '',
+    epic: j['epic'] as String? ?? '',
+    serial: j['serial'] as String? ?? '',
+    part: j['part'] as String? ?? '',
+    house: j['house'] as String? ?? '',
+    age: j['age'] as String? ?? '',
+    gender: j['gender'] as String? ?? '',
+    page: (j['page'] as num?)?.toInt() ?? 1,
+    pdf: j['pdf'] as String? ?? '',
+    pdfName: j['pdf_name'] as String? ?? (j['pdf'] as String? ?? ''),
+    village: j['village'] as String? ?? '',
+    score: (j['score'] as num?)?.toDouble() ?? 0,
+  );
 
   String get relationLabel {
     switch (relationType.toLowerCase()) {
@@ -100,9 +100,17 @@ class DuplicateRecord {
   final String pdf;
   final String pdfName;
 
-  const DuplicateRecord({required this.id, required this.name, required this.relationName,
-    required this.epic, required this.serial, required this.page, required this.village,
-    required this.pdf, required this.pdfName});
+  const DuplicateRecord({
+    required this.id,
+    required this.name,
+    required this.relationName,
+    required this.epic,
+    required this.serial,
+    required this.page,
+    required this.village,
+    required this.pdf,
+    required this.pdfName,
+  });
 
   factory DuplicateRecord.fromJson(Map<String, dynamic> j) => DuplicateRecord(
     id: (j['id'] as num?)?.toInt() ?? 0,
@@ -123,30 +131,55 @@ class DuplicateGroup {
   final String relationLabel;
   final List<DuplicateRecord> records;
 
-  const DuplicateGroup({required this.key, required this.label,
-    required this.relationLabel, required this.records});
+  const DuplicateGroup({
+    required this.key,
+    required this.label,
+    required this.relationLabel,
+    required this.records,
+  });
 
   factory DuplicateGroup.fromJson(Map<String, dynamic> j) => DuplicateGroup(
     key: j['key'] as String? ?? '',
     label: j['label'] as String? ?? '',
     relationLabel: j['relation_label'] as String? ?? '',
     records: ((j['records'] as List?) ?? const [])
-      .map((e) => DuplicateRecord.fromJson(e as Map<String, dynamic>)).toList(),
+        .map((e) => DuplicateRecord.fromJson(e as Map<String, dynamic>))
+        .toList(),
   );
 }
 
 class DuplicateOverview {
   final List<DuplicateGroup> epic;
   final List<DuplicateGroup> name;
+  final List<DuplicateGroup> sameRelativeAcrossVillages;
+  final List<DuplicateGroup> differentRelativeAcrossVillages;
+  final bool crossVillageSetupRequired;
 
-  const DuplicateOverview({required this.epic, required this.name});
+  const DuplicateOverview({
+    required this.epic,
+    required this.name,
+    required this.sameRelativeAcrossVillages,
+    required this.differentRelativeAcrossVillages,
+    required this.crossVillageSetupRequired,
+  });
 
-  factory DuplicateOverview.fromJson(Map<String, dynamic> j) => DuplicateOverview(
-    epic: ((j['epic'] as List?) ?? const [])
-      .map((e) => DuplicateGroup.fromJson(e as Map<String, dynamic>)).toList(),
-    name: ((j['name'] as List?) ?? const [])
-      .map((e) => DuplicateGroup.fromJson(e as Map<String, dynamic>)).toList(),
-  );
+  factory DuplicateOverview.fromJson(Map<String, dynamic> j) =>
+      DuplicateOverview(
+        epic: ((j['epic'] as List?) ?? const [])
+            .map((e) => DuplicateGroup.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        name: ((j['name'] as List?) ?? const [])
+            .map((e) => DuplicateGroup.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        sameRelativeAcrossVillages: ((j['same_relative'] as List?) ?? const [])
+            .map((e) => DuplicateGroup.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        differentRelativeAcrossVillages:
+            ((j['different_relative'] as List?) ?? const [])
+                .map((e) => DuplicateGroup.fromJson(e as Map<String, dynamic>))
+                .toList(),
+        crossVillageSetupRequired: j['setup_required'] == true,
+      );
 }
 
 class SearchResponse {
@@ -171,17 +204,17 @@ class SearchResponse {
   });
 
   factory SearchResponse.fromJson(Map<String, dynamic> j) => SearchResponse(
-        results: ((j['results'] as List?) ?? const [])
-            .map((e) => VoterResult.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        total: (j['total'] as num?)?.toInt() ?? 0,
-        page: (j['page'] as num?)?.toInt() ?? 1,
-        pageSize: (j['page_size'] as num?)?.toInt() ?? 20,
-        tookMs: (j['took_ms'] as num?)?.toDouble() ?? 0,
-        query: (j['query'] as Map?)?.cast<String, dynamic>() ?? const {},
-        relaxed: j['relaxed'] as bool? ?? false,
-        suggestions: ((j['suggestions'] as List?) ?? const []).cast<String>(),
-      );
+    results: ((j['results'] as List?) ?? const [])
+        .map((e) => VoterResult.fromJson(e as Map<String, dynamic>))
+        .toList(),
+    total: (j['total'] as num?)?.toInt() ?? 0,
+    page: (j['page'] as num?)?.toInt() ?? 1,
+    pageSize: (j['page_size'] as num?)?.toInt() ?? 20,
+    tookMs: (j['took_ms'] as num?)?.toDouble() ?? 0,
+    query: (j['query'] as Map?)?.cast<String, dynamic>() ?? const {},
+    relaxed: j['relaxed'] as bool? ?? false,
+    suggestions: ((j['suggestions'] as List?) ?? const []).cast<String>(),
+  );
 
   int get totalPages => total == 0 ? 0 : ((total - 1) ~/ pageSize) + 1;
 }
@@ -211,16 +244,16 @@ class Suggestion {
   });
 
   factory Suggestion.fromJson(Map<String, dynamic> j) => Suggestion(
-        text: j['text'] as String? ?? '',
-        name: j['name'] as String? ?? '',
-        relationName: j['relation_name'] as String? ?? '',
-        relationType: j['relation_type'] as String? ?? '',
-        village: j['village'] as String? ?? '',
-        pdf: j['pdf'] as String? ?? '',
-        page: (j['page'] as num?)?.toInt() ?? 1,
-        age: j['age'] as String? ?? '',
-        gender: j['gender'] as String? ?? '',
-      );
+    text: j['text'] as String? ?? '',
+    name: j['name'] as String? ?? '',
+    relationName: j['relation_name'] as String? ?? '',
+    relationType: j['relation_type'] as String? ?? '',
+    village: j['village'] as String? ?? '',
+    pdf: j['pdf'] as String? ?? '',
+    page: (j['page'] as num?)?.toInt() ?? 1,
+    age: j['age'] as String? ?? '',
+    gender: j['gender'] as String? ?? '',
+  );
 }
 
 class Village {
@@ -231,10 +264,10 @@ class Village {
   const Village({required this.name, this.pdfs = 0, this.records = 0});
 
   factory Village.fromJson(Map<String, dynamic> j) => Village(
-        name: j['name'] as String? ?? '',
-        pdfs: (j['pdfs'] as num?)?.toInt() ?? 0,
-        records: (j['records'] as num?)?.toInt() ?? 0,
-      );
+    name: j['name'] as String? ?? '',
+    pdfs: (j['pdfs'] as num?)?.toInt() ?? 0,
+    records: (j['records'] as num?)?.toInt() ?? 0,
+  );
 }
 
 class PublicStats {
@@ -255,13 +288,13 @@ class PublicStats {
   });
 
   factory PublicStats.fromJson(Map<String, dynamic> j) => PublicStats(
-        totalPdfs: (j['total_pdfs'] as num?)?.toInt() ?? 0,
-        totalRecords: (j['total_records'] as num?)?.toInt() ?? 0,
-        totalVillages: (j['total_villages'] as num?)?.toInt() ?? 0,
-        indexStatus: j['index_status'] as String? ?? 'empty',
-        indexVersion: (j['index_version'] as num?)?.toInt() ?? 0,
-        lastIndexedAt: j['last_indexed_at'] as String?,
-      );
+    totalPdfs: (j['total_pdfs'] as num?)?.toInt() ?? 0,
+    totalRecords: (j['total_records'] as num?)?.toInt() ?? 0,
+    totalVillages: (j['total_villages'] as num?)?.toInt() ?? 0,
+    indexStatus: j['index_status'] as String? ?? 'empty',
+    indexVersion: (j['index_version'] as num?)?.toInt() ?? 0,
+    lastIndexedAt: j['last_indexed_at'] as String?,
+  );
 }
 
 class IndexProgress {
@@ -282,13 +315,13 @@ class IndexProgress {
   });
 
   factory IndexProgress.fromJson(Map<String, dynamic> j) => IndexProgress(
-        current: (j['current'] as num?)?.toInt() ?? 0,
-        total: (j['total'] as num?)?.toInt() ?? 0,
-        percent: (j['percent'] as num?)?.toDouble() ?? 0,
-        file: j['file'] as String? ?? '',
-        filesDone: (j['files_done'] as num?)?.toInt() ?? 0,
-        filesTotal: (j['files_total'] as num?)?.toInt() ?? 0,
-      );
+    current: (j['current'] as num?)?.toInt() ?? 0,
+    total: (j['total'] as num?)?.toInt() ?? 0,
+    percent: (j['percent'] as num?)?.toDouble() ?? 0,
+    file: j['file'] as String? ?? '',
+    filesDone: (j['files_done'] as num?)?.toInt() ?? 0,
+    filesTotal: (j['files_total'] as num?)?.toInt() ?? 0,
+  );
 }
 
 class IndexStatus {
@@ -319,18 +352,20 @@ class IndexStatus {
   });
 
   factory IndexStatus.fromJson(Map<String, dynamic> j) => IndexStatus(
-        status: j['status'] as String? ?? 'empty',
-        version: (j['version'] as num?)?.toInt() ?? 0,
-        lastIndexedAt: j['last_indexed_at'] as String?,
-        lastDurationSec: (j['last_duration_sec'] as num?)?.toDouble(),
-        error: j['error'] as String?,
-        totalPdfs: (j['total_pdfs'] as num?)?.toInt() ?? 0,
-        indexedPdfs: (j['indexed_pdfs'] as num?)?.toInt() ?? 0,
-        totalRecords: (j['total_records'] as num?)?.toInt() ?? 0,
-        totalVillages: (j['total_villages'] as num?)?.toInt() ?? 0,
-        ocrAvailable: j['ocr_available'] as bool? ?? false,
-        progress: IndexProgress.fromJson((j['progress'] as Map?)?.cast<String, dynamic>() ?? const {}),
-      );
+    status: j['status'] as String? ?? 'empty',
+    version: (j['version'] as num?)?.toInt() ?? 0,
+    lastIndexedAt: j['last_indexed_at'] as String?,
+    lastDurationSec: (j['last_duration_sec'] as num?)?.toDouble(),
+    error: j['error'] as String?,
+    totalPdfs: (j['total_pdfs'] as num?)?.toInt() ?? 0,
+    indexedPdfs: (j['indexed_pdfs'] as num?)?.toInt() ?? 0,
+    totalRecords: (j['total_records'] as num?)?.toInt() ?? 0,
+    totalVillages: (j['total_villages'] as num?)?.toInt() ?? 0,
+    ocrAvailable: j['ocr_available'] as bool? ?? false,
+    progress: IndexProgress.fromJson(
+      (j['progress'] as Map?)?.cast<String, dynamic>() ?? const {},
+    ),
+  );
 
   bool get isIndexing => status == 'indexing';
 }
@@ -363,18 +398,18 @@ class PdfFile {
   });
 
   factory PdfFile.fromJson(Map<String, dynamic> j) => PdfFile(
-        id: j['id'] as String? ?? '',
-        name: j['name'] as String? ?? '',
-        village: j['village'] as String? ?? '',
-        size: (j['size'] as num?)?.toInt() ?? 0,
-        pages: (j['pages'] as num?)?.toInt() ?? 0,
-        uploadedAt: j['uploaded_at'] as String? ?? '',
-        indexed: j['indexed'] as bool? ?? false,
-        records: (j['records'] as num?)?.toInt() ?? 0,
-        ocrPages: (j['ocr_pages'] as num?)?.toInt() ?? 0,
-        status: j['status'] as String? ?? '',
-        error: j['error'] as String? ?? '',
-      );
+    id: j['id'] as String? ?? '',
+    name: j['name'] as String? ?? '',
+    village: j['village'] as String? ?? '',
+    size: (j['size'] as num?)?.toInt() ?? 0,
+    pages: (j['pages'] as num?)?.toInt() ?? 0,
+    uploadedAt: j['uploaded_at'] as String? ?? '',
+    indexed: j['indexed'] as bool? ?? false,
+    records: (j['records'] as num?)?.toInt() ?? 0,
+    ocrPages: (j['ocr_pages'] as num?)?.toInt() ?? 0,
+    status: j['status'] as String? ?? '',
+    error: j['error'] as String? ?? '',
+  );
 }
 
 class ApiException implements Exception {

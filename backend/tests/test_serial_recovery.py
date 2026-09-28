@@ -6,7 +6,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from backend.app.pdf_manager.pdf_parser import VoterRecord, _apply_verified_page_serials
+from backend.app.pdf_manager.pdf_parser import (
+    VoterRecord,
+    _apply_verified_page_serials,
+    _recover_missing_sequence_serials,
+)
 
 
 def records(serials: list[int]) -> list[VoterRecord]:
@@ -42,5 +46,23 @@ unsafe = [{"name": "पहिले नाव", "serial": "275"}, {"name": "द�
 assert not _apply_verified_page_serials(unsafe,
     [VoterRecord(name="नाव वेगळे", serial="276"), VoterRecord(name="तिसरे नाव", serial="278")], 276)
 assert [row["serial"] for row in unsafe] == ["275", "294", "305"]
+
+complete_except_one = [{"serial": str(number)} for number in range(1, 301)]
+complete_except_one[200]["serial"] = ""
+assert _recover_missing_sequence_serials(complete_except_one) == 1
+assert complete_except_one[200]["serial"] == "201"
+
+multiple_blanks = [{"serial": "1"}, {"serial": ""}, {"serial": ""}, {"serial": "4"}]
+assert _recover_missing_sequence_serials(multiple_blanks) == 2
+assert [row["serial"] for row in multiple_blanks] == ["1", "2", "3", "4"]
+
+for ambiguous in (
+    [{"serial": "1"}, {"serial": "4"}, {"serial": ""}],
+    [{"serial": "1"}, {"serial": "not-a-number"}, {"serial": ""}],
+    [{"serial": "2"}, {"serial": ""}, {"serial": "3"}],
+):
+    before = [row["serial"] for row in ambiguous]
+    assert _recover_missing_sequence_serials(ambiguous) == 0
+    assert [row["serial"] for row in ambiguous] == before
 
 print("PASS: serial recovery requires matching cards and complete sequence")
