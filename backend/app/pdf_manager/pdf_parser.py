@@ -928,6 +928,10 @@ def _recover_page_serials(path: Path, page_no: int, rows: list[dict], expected: 
         if _merge_complete_page(rows, other, expected):
             log.info("Recovered complete page %d with alternate layout OCR", page_no)
             return True
+        if (expected and len(expected) == len(rows)
+                and _apply_verified_page_serials(rows, other, min(expected))):
+            log.info("Recovered page %d serials by matching bilingual OCR names", page_no)
+            return True
 
         confirmed = _digit_candidates(page, bilingual, expected)
     before = [str(row.get("serial") or "") for row in rows]
@@ -1063,6 +1067,10 @@ def parse_pdf(
             if (len(actual) != len(rows) or len(actual) != len(set(actual))
                     or set(actual) != expected or len(rows) != len(expected)):
                 _recover_page_serials(path, page_no, rows, expected)
+        all_rows = [row for _, _, _, page_rows in results for row in page_rows]
+        repaired = _recover_missing_sequence_serials(all_rows)
+        if repaired:
+            log.info("Recovered %d serials from the complete roll sequence", repaired)
     records: list[VoterRecord] = []
     ocr_pages = 0
     part_hint = ""
