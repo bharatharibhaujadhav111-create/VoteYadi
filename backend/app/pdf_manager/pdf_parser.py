@@ -1043,6 +1043,39 @@ def _recover_single_missing_card(
     return True
 
 
+def _recover_single_card_serial(
+    rows: list[dict], expected: set[int], anchors: list[Line], page_width: float
+) -> bool:
+    """Use a uniquely positioned printed serial for a one-card page."""
+    if (len(rows) != 1 or len(expected) != 1
+            or str(rows[0].get("serial") or "").strip()
+            or not str(rows[0].get("name") or "").strip()):
+        return False
+    serial = next(iter(expected))
+    serial_anchors = []
+    name_anchors = []
+    for x, y, text in anchors:
+        value = text.strip()
+        if DEV_SERIAL_RE.fullmatch(value):
+            try:
+                if int(to_ascii_digits(value)) == serial:
+                    serial_anchors.append((x, y))
+            except ValueError:
+                pass
+        elif DEV_NAME_RE.match(text) or NAME_RE.match(text):
+            name_anchors.append((x, y))
+    if len(serial_anchors) != 1 or len(name_anchors) != 1:
+        return False
+    serial_x, serial_y = serial_anchors[0]
+    name_x, name_y = name_anchors[0]
+    column_width = page_width / 3
+    if (int(serial_x / column_width) != int(name_x / column_width)
+            or not 0 < name_y - serial_y < 90):
+        return False
+    rows[0]["serial"] = str(serial)
+    return True
+
+
 def _recover_page_serials(path: Path, page_no: int, rows: list[dict], expected: set[int]) -> bool:
     """Recover a suspect page using layout and digit passes plus neighbour bounds."""
     with pymupdf.open(path) as doc:
@@ -1057,6 +1090,9 @@ def _recover_page_serials(path: Path, page_no: int, rows: list[dict], expected: 
         if (expected and len(expected) == len(rows)
                 and _apply_verified_page_serials(rows, other, min(expected))):
             log.info("Recovered page %d serials by matching bilingual OCR names", page_no)
+            return True
+        if _recover_single_card_serial(rows, expected, bilingual, page.rect.width):
+            log.info("Recovered serial on one-card page %d from its printed header", page_no)
             return True
         if _recover_single_missing_card(page, page_no, rows, expected, bilingual):
             log.info("Recovered one missing voter card on page %d", page_no)

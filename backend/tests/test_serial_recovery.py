@@ -13,6 +13,7 @@ from backend.app.pdf_manager.pdf_parser import (
     _card_record_from_text,
     _merge_complete_page,
     _neighbour_expected,
+    _recover_single_card_serial,
     _recover_missing_sequence_serials,
 )
 
@@ -96,6 +97,17 @@ last_page_results = [
     (37, "", True, []),
 ]
 assert _neighbour_expected(last_page_results, 1) == {955}
+
+single_card = [{"name": "मतदार नाव", "serial": ""}]
+single_card_anchors = [(205.3, 111.8, "955"), (62.0, 152.4, "नाव : मतदार नाव")]
+assert _recover_single_card_serial(single_card, {955}, single_card_anchors, 1983.0)
+assert single_card[0]["serial"] == "955"
+
+misaligned_serial = [{"name": "मतदार नाव", "serial": ""}]
+assert not _recover_single_card_serial(
+    misaligned_serial, {955}, [(700.0, 111.8, "955"), (62.0, 152.4, "नाव : मतदार नाव")], 1983.0
+)
+assert misaligned_serial[0]["serial"] == ""
 
 cropped = _card_record_from_text(
     """| 112 | ISF7014244
