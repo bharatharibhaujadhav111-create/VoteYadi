@@ -688,14 +688,22 @@ class ResultCard extends StatelessWidget {
                             icon: const Icon(Icons.download_rounded, size: 17),
                             label: const Text('डाउनलोड'),
                           ),
-                          OutlinedButton.icon(
+                          OutlinedButton(
                             style: OutlinedButton.styleFrom(
                               foregroundColor: AppColors.greenDark,
                               side: const BorderSide(color: AppColors.whatsapp),
                             ),
                             onPressed: () => _shareOnWhatsApp(context, r),
-                            icon: const Icon(Icons.chat_rounded, size: 17),
-                            label: const Text('WhatsApp वर शेअर करा'),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _WhatsAppMark(),
+                                SizedBox(width: 8),
+                                Text('WhatsApp शेअर'),
+                                SizedBox(width: 6),
+                                Icon(Icons.arrow_forward_rounded, size: 18),
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -748,6 +756,23 @@ class ResultCard extends StatelessWidget {
     if (!opened && context.mounted) {
       showSnack(context, 'WhatsApp उघडता आले नाही', error: true);
     }
+  }
+}
+
+class _WhatsAppMark extends StatelessWidget {
+  const _WhatsAppMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: const BoxDecoration(
+        color: AppColors.whatsapp,
+        shape: BoxShape.circle,
+      ),
+      child: const Icon(Icons.phone_rounded, color: Colors.white, size: 14),
+    );
   }
 }
 

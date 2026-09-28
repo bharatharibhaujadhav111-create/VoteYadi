@@ -14,7 +14,11 @@ import 'widgets/search_card.dart';
 
 /// Public user dashboard ("/").
 class UserDashboardPage extends StatelessWidget {
-  const UserDashboardPage({super.key, this.initialQuery = '', this.initialVillage = ''});
+  const UserDashboardPage({
+    super.key,
+    this.initialQuery = '',
+    this.initialVillage = '',
+  });
 
   /// Populated from the URL (`/?q=...&village=...`) for shareable links.
   final String initialQuery;
@@ -23,8 +27,9 @@ class UserDashboardPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (ctx) => VoterSearchController(ctx.read<ApiClient>(), RecentSearches())
-        ..init(initialQuery: initialQuery, initialVillage: initialVillage),
+      create: (ctx) =>
+          VoterSearchController(ctx.read<ApiClient>(), RecentSearches())
+            ..init(initialQuery: initialQuery, initialVillage: initialVillage),
       child: const _UserDashboardView(),
     );
   }
@@ -38,7 +43,7 @@ class _UserDashboardView extends StatelessWidget {
     final c = context.watch<VoterSearchController>();
     final hasResults = c.response != null || c.loading || c.error != null;
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: RefreshIndicator(
           color: AppColors.saffron,
@@ -65,7 +70,11 @@ class _UserDashboardView extends StatelessWidget {
                       else ...[
                         StatsRow(stats: c.stats),
                         const SizedBox(height: 12),
-                        VillagesCard(villages: c.villages, selected: c.selectedVillage, onSelect: c.selectVillage),
+                        VillagesCard(
+                          villages: c.villages,
+                          selected: c.selectedVillage,
+                          onSelect: c.selectVillage,
+                        ),
                         const SizedBox(height: 12),
                         const HowToCard(),
                       ],
