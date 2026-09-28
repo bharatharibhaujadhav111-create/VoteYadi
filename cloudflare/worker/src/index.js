@@ -437,6 +437,23 @@ async function handle(request, env) {
     return json({ old_id: input.id, new_id: input.id });
   }
 
+  if (request.method === "POST" && p === "/api/admin/pdfs/retry") {
+    const input = await request.json();
+    const id = encodeURIComponent(String(input.id || ""));
+    const { body } = await db(env, `documents?select=id,status,village_id&id=eq.${id}&limit=1`);
+    const document = body?.[0];
+    if (!document) return json({ detail: "PDF not found" }, 404);
+    if (!document.village_id) return json({ detail: "Assign a village before indexing" }, 400);
+    if (!["failed", "needs_review"].includes(document.status)) {
+      return json({ detail: "Only failed or review PDFs can be retried" }, 409);
+    }
+    await db(env, `documents?id=eq.${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "queued", active: false, error_message: null, quality_report: null }),
+    });
+    return json({ id: input.id, status: "queued" });
+  }
+
   if (request.method === "GET" && p === "/api/admin/index/status") return json(await indexStatus(env));
   if (request.method === "POST" && p === "/api/admin/index/rebuild") {
     await db(env, "documents?status=eq.ready", { method: "PATCH", body: JSON.stringify({ status: "queued", active: false }) });

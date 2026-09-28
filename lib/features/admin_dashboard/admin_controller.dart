@@ -91,16 +91,24 @@ class AdminController extends ChangeNotifier {
   }
 
   Future<String?> addVillage(String name) => _run(() => api.addVillage(name));
-  Future<String?> renameVillage(String o, String n) => _run(() => api.renameVillage(o, n));
-  Future<String?> deleteVillage(String name) => _run(() => api.deleteVillage(name));
+  Future<String?> renameVillage(String o, String n) =>
+      _run(() => api.renameVillage(o, n));
+  Future<String?> deleteVillage(String name) =>
+      _run(() => api.deleteVillage(name));
   Future<String?> deletePdf(String id) => _run(() => api.deletePdf(id));
-  Future<String?> renamePdf(String id, String newName) => _run(() => api.renamePdf(id, newName));
-  Future<String?> movePdf(String id, String village) => _run(() => api.movePdf(id, village));
+  Future<String?> renamePdf(String id, String newName) =>
+      _run(() => api.renamePdf(id, newName));
+  Future<String?> movePdf(String id, String village) =>
+      _run(() => api.movePdf(id, village));
+  Future<String?> retryPdf(String id) => _run(() => api.retryPdf(id));
   Future<String?> rebuild({bool full = true}) => _run(() async {
-        index = await api.rebuildIndex(full: full);
-      });
+    index = await api.rebuildIndex(full: full);
+  });
 
-  Future<({int saved, List<String> errors})> upload(List<({String name, Uint8List bytes})> files, String village) async {
+  Future<({int saved, List<String> errors})> upload(
+    List<({String name, Uint8List bytes})> files,
+    String village,
+  ) async {
     busy = true;
     uploadProgress = 0;
     notifyListeners();
@@ -117,12 +125,15 @@ class AdminController extends ChangeNotifier {
     }
   }
 
-  Future<String?> replacePdf(String id, String fileName, Uint8List bytes) => _run(() => api.replacePdf(id, fileName, bytes));
+  Future<String?> replacePdf(String id, String fileName, Uint8List bytes) =>
+      _run(() => api.replacePdf(id, fileName, bytes));
 
   String _msg(Object e) {
     if (e is ApiException) return e.message;
     final s = e.toString();
-    if (s.contains('Failed to fetch') || s.contains('SocketException') || s.contains('ClientException')) {
+    if (s.contains('Failed to fetch') ||
+        s.contains('SocketException') ||
+        s.contains('ClientException')) {
       return 'Cannot reach the server. Is the backend running?';
     }
     return s;

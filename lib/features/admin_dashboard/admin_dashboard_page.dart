@@ -45,7 +45,9 @@ class _AdminViewState extends State<_AdminView> {
   void _selectDuplicates() {
     setState(() {
       _showDuplicates = true;
-      _duplicateIndexSignature = _indexSignature(context.read<AdminController>());
+      _duplicateIndexSignature = _indexSignature(
+        context.read<AdminController>(),
+      );
       _duplicatesFuture = context.read<ApiClient>().adminDuplicates();
     });
   }
@@ -102,6 +104,11 @@ class _AdminViewState extends State<_AdminView> {
       case PdfAction.download:
         await viewer.download(context, p.id);
         return;
+      case PdfAction.retry:
+        err = await c.retryPdf(p.id);
+        if (err == null && mounted) {
+          showSnack(context, '${p.name} queued for indexing.');
+        }
       case PdfAction.replace:
         final files = await pickPdfs(multiple: false);
         if (files.isEmpty) return;
@@ -180,8 +187,11 @@ class _AdminViewState extends State<_AdminView> {
         _duplicateIndexSignature = signature;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && _showDuplicates) {
-            setState(() =>
-                _duplicatesFuture = context.read<ApiClient>().adminDuplicates());
+            setState(
+              () => _duplicatesFuture = context
+                  .read<ApiClient>()
+                  .adminDuplicates(),
+            );
           }
         });
       }
