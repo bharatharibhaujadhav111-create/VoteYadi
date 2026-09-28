@@ -56,8 +56,8 @@ wrong_unique_serial[24]["serial"] = "125"
 try:
     validate(wrong_unique_serial, pages=5, ocr_pages=5)
 except QualityError as error:
-    assert error.report["serial_sequence_missing"] == 1
-    assert error.report["serial_sequence_unexpected"] == 1
+    assert error.report["serial_sequence_missing"] >= 1
+    assert error.report["serial_order_anomalies"]
 else:
     raise AssertionError("Quality gate accepted an incorrect unique serial")
 

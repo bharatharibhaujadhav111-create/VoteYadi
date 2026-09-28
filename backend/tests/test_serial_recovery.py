@@ -8,7 +8,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from backend.app.pdf_manager.pdf_parser import (
     VoterRecord,
+    _apply_digit_verified_serials,
     _apply_verified_page_serials,
+    _merge_complete_page,
+    _neighbour_expected,
     _recover_missing_sequence_serials,
 )
 
@@ -77,5 +80,46 @@ for ambiguous in (
 unique_set_proof = [{"serial": "2"}, {"serial": ""}, {"serial": "3"}]
 assert _recover_missing_sequence_serials(unique_set_proof) == 1
 assert unique_set_proof[1]["serial"] == "1"
+
+# Sparse pages are bounded by printed serials on the surrounding pages.
+page_results = [
+    (12, "", True, [{"serial": "300"}]),
+    (13, "", True, [{"serial": ""}]),
+    (14, "", True, [{"serial": "302"}]),
+]
+assert _neighbour_expected(page_results, 1) == {301}
+
+# Digits-only OCR must independently confirm both lone-card and full-page fixes.
+lone = [{"serial": ""}]
+assert _apply_digit_verified_serials(lone, {301}, {301})
+assert lone[0]["serial"] == "301"
+wrong_hundreds = [{"serial": str(number)} for number in range(570, 593)]
+assert _apply_digit_verified_serials(wrong_hundreds, set(range(970, 993)), set(range(970, 993)))
+assert [row["serial"] for row in wrong_hundreds] == [str(number) for number in range(970, 993)]
+
+# On a substantial page, one verification miss is allowed only when all OCR
+# serials share the same exact offset into the neighbour-proven interval.
+one_digit_missed = [{"serial": str(number)} for number in range(570, 593)]
+expected_full_page = set(range(970, 993))
+assert _apply_digit_verified_serials(one_digit_missed, expected_full_page, expected_full_page - {975})
+assert [row["serial"] for row in one_digit_missed] == [str(number) for number in range(970, 993)]
+
+sparse_offset = [{"serial": "300"}, {"serial": "301"}]
+assert not _apply_digit_verified_serials(sparse_offset, {700, 701}, {700})
+assert [row["serial"] for row in sparse_offset] == ["300", "301"]
+
+unconfirmed = [{"serial": "570"}]
+assert not _apply_digit_verified_serials(unconfirmed, {970}, set())
+assert unconfirmed[0]["serial"] == "570"
+
+# An alternate layout pass may add a missed card, while primary text is kept.
+primary = [{"name": "नाव 482", "epic": "ABC0000482", "serial": "482"}]
+alternate = [
+    VoterRecord(name="नाव 481", epic="ABC0000481", serial="481"),
+    VoterRecord(name="alternate text", epic="ABC0000482", serial="482"),
+]
+assert _merge_complete_page(primary, alternate, {481, 482})
+assert [row["serial"] for row in primary] == ["481", "482"]
+assert primary[1]["name"] == "नाव 482"
 
 print("PASS: serial recovery requires matching cards and complete sequence")

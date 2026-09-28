@@ -260,7 +260,7 @@ def _probe_page_text(page: pymupdf.Page) -> str:
         return ""
 
 
-def _ocr_lines(page: pymupdf.Page, lang: str | None = None) -> list[Line]:
+def _ocr_lines(page: pymupdf.Page, lang: str | None = None, *, psm: int | None = None) -> list[Line]:
     """OCR the page and return positioned lines (converted to PDF points).
 
     ``lang`` defaults to the page's own script profile (see ``ocr_language_for``),
@@ -294,7 +294,7 @@ def _ocr_lines(page: pymupdf.Page, lang: str | None = None) -> list[Line]:
         # psm 6 skips; both handle the 3-column grid once we split by gaps.
         use_lang = lang or config.OCR_LANG
         data = pytesseract.image_to_data(
-            img, lang=use_lang, config=f"--psm {config.OCR_PSM}", output_type=Output.DICT
+            img, lang=use_lang, config=f"--psm {psm or config.OCR_PSM}", output_type=Output.DICT
         )
     except Exception as exc:  # pragma: no cover
         log.warning("OCR failed on page %s: %s", page.number, exc)
@@ -405,6 +405,46 @@ def order_by_columns(lines: list[Line]) -> list[str]:
                 idx = i
         return idx
 
+    # Rejoin label values before inserting spatially inferred serial markers.
+    # Otherwise a marker can sort between "नाव: श..." and the continuation
+    # fragment Tesseract placed a few points to its right.
+    consumed: set[int] = set()
+    replacements: dict[int, Line] = {}
+    for anchor_index, anchor in enumerate(lines):
+        if not (NAME_RE.match(anchor[2]) or DEV_NAME_RE.match(anchor[2])
+                or RELATION_RE.match(anchor[2]) or DEV_RELATION_RE.match(anchor[2])
+                or HOUSE_RE.search(anchor[2]) or DEV_HOUSE_RE.search(anchor[2])):
+            continue
+        col = column_of(anchor[0])
+        col_width = (starts[col + 1] - starts[col]) if col + 1 < len(starts) else (
+            starts[col] - starts[col - 1] if col else 600
+        )
+        continuations: list[tuple[float, str, int]] = []
+        for candidate_index, candidate in enumerate(lines):
+            if candidate_index == anchor_index or candidate_index in consumed:
+                continue
+            if column_of(candidate[0]) != col or not (anchor[0] < candidate[0]):
+                continue
+            if candidate[0] - anchor[0] >= col_width * 0.55 or abs(candidate[1] - anchor[1]) > 8:
+                continue
+            text = candidate[2].strip()
+            if (not text or DEV_SERIAL_RE.fullmatch(text) or SERIAL_EPIC_RE.fullmatch(text)
+                    or EPIC_RE.search(text) or NAME_RE.match(text) or DEV_NAME_RE.match(text)
+                    or RELATION_RE.match(text) or DEV_RELATION_RE.match(text)):
+                continue
+            continuations.append((candidate[0], text, candidate_index))
+        if continuations:
+            continuations.sort()
+            replacements[anchor_index] = (
+                anchor[0], anchor[1],
+                " ".join([anchor[2], *(item[1] for item in continuations)]),
+            )
+            consumed.update(item[2] for item in continuations)
+    if replacements:
+        lines = [replacements.get(index, line) for index, line in enumerate(lines)
+                 if index not in consumed]
+        name_anchors = [line for line in lines if NAME_RE.match(line[2]) or DEV_NAME_RE.match(line[2])]
+
     # Serial numbers are printed at a stable position above each voter name.
     # If OCR misses a number, recover it from the card's row/column position,
     # calibrated by the serials that OCR did read on this same page.  Spatial
@@ -477,7 +517,21 @@ def order_by_columns(lines: list[Line]) -> list[str]:
     ordered: list[str] = []
     for col in buckets:
         col.sort(key=lambda l: (round(l[1] / 2), l[0]))
-        ordered.extend(l[2] for l in col)
+        joined: list[Line] = []
+        for line in col:
+            if joined and abs(joined[-1][1] - line[1]) <= 3:
+                prior = joined[-1][2]
+                # OCR may split a label and its Marathi value at a large word
+                # gap inside one card. Join labelled fields only; serial/EPIC
+                # headers stay separate so a damaged EPIC cannot hide a good
+                # serial number.
+                if (NAME_RE.match(prior) or DEV_NAME_RE.match(prior)
+                        or RELATION_RE.match(prior) or DEV_RELATION_RE.match(prior)
+                        or HOUSE_RE.search(prior) or DEV_HOUSE_RE.search(prior)):
+                    joined[-1] = (joined[-1][0], joined[-1][1], f"{prior} {line[2]}")
+                    continue
+            joined.append(line)
+        ordered.extend(line[2] for line in joined)
     return ordered
 
 
@@ -736,17 +790,174 @@ def _apply_verified_page_serials(rows: list[dict], other: list[VoterRecord], fir
     return True
 
 
-def _recover_page_serials(path: Path, page_no: int, rows: list[dict], first_serial: int) -> bool:
-    """Re-read suspect card numbers with both models, retaining Marathi names."""
-    with pymupdf.open(path) as doc:
-        bilingual = _ocr_lines(doc[page_no - 1], lang=f'{config.OCR_LANG_DEV}+{config.OCR_LANG or "eng"}')
-    if not bilingual:
+def _numeric_serials(rows: list[dict]) -> list[int]:
+    return [int(value) for row in rows if (value := str(row.get("serial") or "").strip()).isdigit()]
+
+
+def _merge_complete_page(rows: list[dict], other: list[VoterRecord], expected: set[int]) -> bool:
+    """Merge a complete alternate parse while preserving primary-pass text."""
+    try:
+        serials = [int(record.serial) for record in other]
+    except (ValueError, TypeError):
         return False
-    other = parse_page_text(order_by_columns(bilingual), page_no).records
-    if not _apply_verified_page_serials(rows, other, first_serial):
+    if len(other) != len(expected) or len(serials) != len(set(serials)) or set(serials) != expected:
         return False
-    log.info("Recovered %d serials on page %d using bilingual OCR", len(rows), page_no)
+
+    indexed = list(enumerate(rows))
+    by_epic = {
+        str(row.get("epic") or "").replace(" ", "").upper(): (index, row)
+        for index, row in indexed if str(row.get("epic") or "").strip()
+    }
+    by_serial = {
+        str(row.get("serial") or "").strip(): (index, row)
+        for index, row in indexed if str(row.get("serial") or "").strip()
+    }
+    by_name = {normalize(str(row.get("name") or "")): (index, row) for index, row in indexed}
+    merged: list[dict] = []
+    used: set[int] = set()
+    alternate_only = 0
+    for record in other:
+        alternate = record.to_row()
+        epic = record.epic.replace(" ", "").upper()
+        match = by_epic.get(epic) if epic else None
+        match = match or by_serial.get(record.serial)
+        match = match or by_name.get(normalize(record.name))
+        if match and match[0] not in used:
+            index, original = match
+            used.add(index)
+            kept = dict(original)
+            kept["serial"] = record.serial
+            merged.append(kept)
+        else:
+            alternate_only += 1
+            merged.append(alternate)
+    expected_new = len(other) - len(rows)
+    if len(used) != len(rows) or alternate_only != expected_new or expected_new not in (0, 1):
+        return False
+    rows[:] = merged
     return True
+
+
+def _digit_candidates(page: pymupdf.Page, anchors: list[Line], expected: set[int]) -> set[int]:
+    """Read only Latin digits, including tight crops around voter headers."""
+    try:
+        import pytesseract  # noqa: WPS433
+        from PIL import Image
+        from pytesseract import Output
+    except Exception:  # pragma: no cover
+        return set()
+    _configure_tesseract(pytesseract)
+    os.environ.setdefault("OMP_THREAD_LIMIT", "1")
+    dpi = max(300, config.OCR_DPI)
+    pix = page.get_pixmap(dpi=dpi, colorspace=pymupdf.csGRAY)
+    image = Image.frombytes("L", (pix.width, pix.height), pix.samples)
+    scale = dpi / 72.0
+    found: set[int] = set()
+
+    def collect(source, psm: int) -> None:
+        try:
+            data = pytesseract.image_to_data(
+                source, lang=config.OCR_LANG or "eng",
+                config=f"--psm {psm} -c tessedit_char_whitelist=0123456789",
+                output_type=Output.DICT,
+            )
+        except Exception as exc:  # pragma: no cover
+            log.debug("digit OCR failed on page %s: %s", page.number + 1, exc)
+            return
+        for value in data.get("text", []):
+            text = str(value or "").strip()
+            if text.isdigit() and int(text) in expected:
+                found.add(int(text))
+
+    collect(image, 12)
+    if expected <= found:
+        return found
+    for x, y, text in anchors:
+        if not (DEV_NAME_RE.match(text) or NAME_RE.match(text)):
+            continue
+        crop = image.crop((
+            max(0, int(x * scale)), max(0, int((y - 115) * scale)),
+            min(image.width, int((x + 220) * scale)),
+            min(image.height, max(1, int((y - 15) * scale))),
+        ))
+        collect(crop, 6)
+        if expected <= found:
+            break
+    return found
+
+
+def _apply_digit_verified_serials(rows: list[dict], expected: set[int], confirmed: set[int]) -> bool:
+    """Apply only corrections independently confirmed by digits-only OCR."""
+    if len(rows) != len(expected):
+        return False
+    actual = _numeric_serials(rows)
+    if len(actual) == len(rows) and len(set(actual)) == len(actual):
+        offset = min(expected) - min(actual)
+        shifted = {value + offset for value in actual}
+        # A full page can lose one otherwise-clear number in the independent
+        # verification pass.  The constant shift is safe only when neighbour
+        # pages prove the exact interval and at least 95% of a substantial
+        # page is separately confirmed. Sparse pages require every number.
+        enough_confirmation = expected <= confirmed or (
+            len(expected) >= 10
+            and len(expected & confirmed) / len(expected) >= 0.95
+        )
+        if shifted == expected and offset and enough_confirmation:
+            for row in rows:
+                row["serial"] = str(int(row["serial"]) + offset)
+            return True
+
+    valid = {value for value in actual if value in expected}
+    unknown = [row for row in rows if not str(row.get("serial") or "").isdigit()
+               or int(row["serial"]) not in expected]
+    missing = expected - valid
+    if expected <= confirmed and len(unknown) == len(missing) == 1:
+        unknown[0]["serial"] = str(next(iter(missing)))
+        return True
+    return False
+
+
+def _recover_page_serials(path: Path, page_no: int, rows: list[dict], expected: set[int]) -> bool:
+    """Recover a suspect page using layout and digit passes plus neighbour bounds."""
+    with pymupdf.open(path) as doc:
+        page = doc[page_no - 1]
+        bilingual = _ocr_lines(
+            page, lang=f'{config.OCR_LANG_DEV}+{config.OCR_LANG or "eng"}', psm=6
+        )
+        other = parse_page_text(order_by_columns(bilingual), page_no).records if bilingual else []
+        if _merge_complete_page(rows, other, expected):
+            log.info("Recovered complete page %d with alternate layout OCR", page_no)
+            return True
+
+        confirmed = _digit_candidates(page, bilingual, expected)
+    before = [str(row.get("serial") or "") for row in rows]
+    if _apply_digit_verified_serials(rows, expected, confirmed):
+        after = [str(row.get("serial") or "") for row in rows]
+        log.info("Digit-verified serial correction on page %d: %s -> %s", page_no, before, after)
+        return True
+    return False
+
+
+def _neighbour_expected(results: list[tuple[int, str, bool, list[dict]]], index: int) -> set[int]:
+    """Serial interval bounded by the nearest populated pages on both sides."""
+    previous: int | None = None
+    following: int | None = None
+    for earlier in range(index - 1, -1, -1):
+        values = _numeric_serials(results[earlier][3])
+        if values:
+            previous = max(values)
+            break
+    for later in range(index + 1, len(results)):
+        values = _numeric_serials(results[later][3])
+        if values:
+            following = min(values)
+            break
+    if previous is None or following is None or following <= previous + 1:
+        return set()
+    expected = set(range(previous + 1, following))
+    # Electoral pages contain at most about 30 cards. A much larger interval
+    # is an official gap or an untrusted neighbour, not safe repair evidence.
+    return expected if len(expected) <= 40 else set()
 
 
 def _recover_missing_sequence_serials(rows: list[dict]) -> int:
@@ -789,7 +1000,13 @@ def _recover_missing_sequence_serials(rows: list[dict]) -> int:
     return len(blank_positions)
 
 
-def parse_pdf(path: str | Path, *, workers: int = 1, progress: "Callable[[int, int], None] | None" = None) -> PdfParseResult:
+def parse_pdf(
+    path: str | Path,
+    *,
+    workers: int = 1,
+    progress: "Callable[[int, int], None] | None" = None,
+    recover_serials: bool = True,
+) -> PdfParseResult:
     """Extract voter records from a PDF.
 
     ``workers`` > 1 parses pages in parallel processes – OCR of scanned rolls is
@@ -831,24 +1048,21 @@ def parse_pdf(path: str | Path, *, workers: int = 1, progress: "Callable[[int, i
                     progress(n + 1, page_count)
 
     results.sort(key=lambda r: r[0])
-    # Marathi-only OCR is best for names, but on some scans it confuses the
-    # hundreds digit (955 -> 555) for a whole page. Re-read only pages whose
-    # serials disagree with their position in the roll, never all pages.
-    next_serial = 1
-    for page_no, _, used_ocr, rows in results:
-        if used_ocr and rows:
-            expected = set(range(next_serial, next_serial + len(rows)))
-            try:
-                actual = {int(row["serial"]) for row in rows}
-            except (ValueError, TypeError):
-                actual = set()
-            if actual != expected:
-                _recover_page_serials(path, page_no, rows, next_serial)
-        next_serial += len(rows)
-    all_rows = [row for _, _, _, rows in results for row in rows]
-    recovered = _recover_missing_sequence_serials(all_rows)
-    if recovered:
-        log.info("Inferred %d blank serial(s) from the complete roll sequence", recovered)
+    # Marathi OCR remains authoritative for names. Re-read only pages whose
+    # printed serial interval conflicts with the populated pages on both sides.
+    # This handles full pages, sparse one-card pages, official page sizes, and
+    # a completely missed card without assuming serial == extracted row count.
+    if recover_serials:
+        for index, (page_no, _, used_ocr, rows) in enumerate(results):
+            if not used_ocr or not rows:
+                continue
+            expected = _neighbour_expected(results, index)
+            if not expected:
+                continue
+            actual = _numeric_serials(rows)
+            if (len(actual) != len(rows) or len(actual) != len(set(actual))
+                    or set(actual) != expected or len(rows) != len(expected)):
+                _recover_page_serials(path, page_no, rows, expected)
     records: list[VoterRecord] = []
     ocr_pages = 0
     part_hint = ""

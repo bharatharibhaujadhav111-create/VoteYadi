@@ -16,8 +16,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("pdf", type=Path)
     parser.add_argument("--workers", type=int, default=2)
+    parser.add_argument("--raw", action="store_true", help="Skip serial recovery and report first-pass OCR values")
     args = parser.parse_args()
-    result = parse_pdf(args.pdf, workers=args.workers,
+    result = parse_pdf(args.pdf, workers=args.workers, recover_serials=not args.raw,
                        progress=lambda done, total: print(f"pages {done}/{total}", flush=True))
     by_page = defaultdict(list)
     for record in result.records:

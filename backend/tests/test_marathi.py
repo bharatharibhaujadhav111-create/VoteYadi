@@ -132,6 +132,19 @@ check("serials paired and missing one inferred", [r.serial for r in ocr_records]
 check("digit-shaped EPIC prefix repaired", [r.epic for r in ocr_records],
       ["ZCG1000001", "ZCG1000002", "ZCG1000003"])
 
+split_name_lines = [
+    (208.0, 112.0, "481"),
+    (62.0, 158.0, "नाव: शबाना"),
+    (230.0, 152.0, "जाकीरहुसेन सय्यद"),
+    (62.0, 179.0, "पतीचे नाव: जाकीरहुसेन सय्यद"),
+    (696.0, 158.0, "नाव: दुसरे नाव"),
+    (1329.0, 158.0, "नाव: तिसरे नाव"),
+]
+split_records = parse_page_text(order_by_columns(split_name_lines), 19, "").records
+check("same-line Marathi name fragments rejoined", len(split_records), 3)
+check("complete split Marathi name retained", split_records[0].name, "शबाना जाकीरहुसेन सय्यद")
+check("split-name serial retained", split_records[0].serial, "481")
+
 print("\n== romanisation quality ==")
 for deva, want in [("जाधव", "jadhav"), ("भारत", "bharat"), ("शिंदे", "shinde"),
                    ("काळे", "kale"), ("पाटील", "patil"), ("मोरे", "more")]:

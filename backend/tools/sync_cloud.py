@@ -114,14 +114,24 @@ def validate(rows: list[dict], pages: int, ocr_pages: int) -> dict:
     """Hold suspicious OCR for review instead of publishing it."""
     names = [r["name"] for r in rows]
     serials = [r["serial"] for r in rows if r["serial"]]
+    blank_serials = len(rows) - len(serials)
+    invalid_serials = sum(not str(value).isdigit() for value in serials)
     duplicate_serials = len(serials) - len(set(serials))
     numeric_serials = {int(value) for value in serials if str(value).isdigit()}
-    # A complete electoral part normally starts at 1. Apply a strict sequence
-    # check only when the observed start supports that layout; supplements can
-    # legitimately start at a higher number.
-    sequential_part = bool(numeric_serials) and min(numeric_serials) <= 3
-    missing_sequence = (set(range(1, len(rows) + 1)) - numeric_serials) if sequential_part else set()
-    unexpected_sequence = (numeric_serials - set(range(1, len(rows) + 1))) if sequential_part else set()
+    sequence_gaps = (set(range(min(numeric_serials), max(numeric_serials) + 1)) - numeric_serials
+                     if numeric_serials else set())
+    page_ranges = []
+    for page in sorted({int(r["page"]) for r in rows}):
+        values = [int(r["serial"]) for r in rows
+                  if int(r["page"]) == page and str(r["serial"]).isdigit()]
+        if values:
+            page_ranges.append((page, min(values), max(values)))
+    serial_order_anomalies = [
+        {"previous_page": previous[0], "page": current[0],
+         "previous_max": previous[2], "current_min": current[1]}
+        for previous, current in zip(page_ranges, page_ranges[1:])
+        if previous[2] >= current[1]
+    ]
     epics = [r["epic"].replace(" ", "").upper() for r in rows if r["epic"]]
     dev_names = sum(bool(re.search(r"[\u0900-\u097f]", name)) for name in names)
     invalid_pages = sum(not 1 <= int(r["page"]) <= pages for r in rows)
@@ -138,7 +148,7 @@ def validate(rows: list[dict], pages: int, ocr_pages: int) -> dict:
         if re.search(r"[A-Za-z]", r["name"] + " " + r["relation_name"])
     ]
     report = {
-        "version": 1,
+        "version": 2,
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "pages": pages,
         "ocr_pages": ocr_pages,
@@ -146,9 +156,12 @@ def validate(rows: list[dict], pages: int, ocr_pages: int) -> dict:
         "records_per_page": round(len(rows) / max(pages, 1), 2),
         "marathi_name_ratio": round(dev_names / max(len(names), 1), 4),
         "serial_coverage": round(len(serials) / max(len(rows), 1), 4),
+        "blank_serials": blank_serials,
+        "invalid_serials": invalid_serials,
         "duplicate_serials": duplicate_serials,
-        "serial_sequence_missing": len(missing_sequence),
-        "serial_sequence_unexpected": len(unexpected_sequence),
+        "serial_sequence_missing": len(sequence_gaps),
+        "serial_sequence_unexpected": 0,
+        "serial_order_anomalies": serial_order_anomalies,
         "duplicate_epics": duplicate_epics,
         "duplicate_names": duplicate_names,
         "duplicate_records": duplicate_records,
@@ -165,12 +178,16 @@ def validate(rows: list[dict], pages: int, ocr_pages: int) -> dict:
         failures.append(f"Only {len(rows)} voter records were extracted from {pages} pages")
     if report["marathi_name_ratio"] < 0.60:
         failures.append("Too few extracted names contain Marathi text")
-    if report["serial_coverage"] < 0.95:
-        failures.append("Too many voter serial numbers are missing")
+    if blank_serials:
+        failures.append(f"{blank_serials} voter serial numbers are blank")
+    if invalid_serials:
+        failures.append(f"{invalid_serials} voter serial numbers are not numeric")
     if duplicate_serials:
         failures.append(f"{duplicate_serials} voter serial numbers are duplicated")
-    if missing_sequence or unexpected_sequence:
-        failures.append(f"Voter serial sequence has {len(missing_sequence)} missing and {len(unexpected_sequence)} unexpected numbers")
+    if sequence_gaps:
+        failures.append(f"Voter serial sequence has {len(sequence_gaps)} unresolved gaps")
+    if serial_order_anomalies:
+        failures.append(f"Voter serial ranges overlap or go backwards across {len(serial_order_anomalies)} page boundaries")
     if invalid_pages:
         failures.append(f"{invalid_pages} records refer to invalid PDF pages")
     if duplicate_names:
