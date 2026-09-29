@@ -21,12 +21,12 @@ test("single first-name match outranks the same token in a middle name", () => {
     > englishNameMatch("Bharat", "विठ्ठल भारत जाधव").tier);
 });
 
-test("ranking paginates after ordering all matching personal names", () => {
+test("ranking keeps relative-name matches after every personal-name match", () => {
   const body = {
     results: [
       { id: 1, name: "सुरेश भारत जाधव" },
       { id: 2, name: "भारत जाधव पाटील" },
-      { id: 3, name: "गणेश पाटील", relation_name: "भारत पाटील" },
+      { id: 3, name: "गणेश पाटील", relation_name: "भारत जाधव" },
       { id: 4, name: "भारत राम जाधव" },
       { id: 5, name: "सुरेश जाधव भारत" },
     ],
@@ -34,7 +34,22 @@ test("ranking paginates after ordering all matching personal names", () => {
 
   const firstPage = rerankEnglish(body, "Bharat Jadhav", 1, 2);
   const secondPage = rerankEnglish(body, "Bharat Jadhav", 2, 2);
+  const thirdPage = rerankEnglish(body, "Bharat Jadhav", 3, 2);
   assert.deepEqual(firstPage.results.map(row => row.id), [2, 4]);
   assert.deepEqual(secondPage.results.map(row => row.id), [1, 5]);
-  assert.equal(firstPage.total, 4);
+  assert.deepEqual(thirdPage.results.map(row => row.id), [3]);
+  assert.equal(firstPage.total, 5);
+});
+
+test("a weak own-name match still precedes an exact relative-name match", () => {
+  const body = {
+    results: [
+      { id: 1, name: "विजयसिंह पाटील", relation_name: "भारत जाधव" },
+      { id: 2, name: "विजयसिंह भारत जाधव", relation_name: "गणेश पाटील" },
+    ],
+  };
+  assert.deepEqual(
+    rerankEnglish(body, "Bharat Jadhav", 1, 10).results.map(row => row.id),
+    [2, 1],
+  );
 });

@@ -123,16 +123,26 @@ function englishNameMatch(query, marathiName) {
 
 function rerankEnglish(body, query, page, pageSize) {
   const ranked = (body?.results || []).map(item => {
-    const match = englishNameMatch(query, item.name);
-    return { ...item, score: Math.round(match.score * 10) / 10, _tier: match.tier, _marathi: match.marathi };
-  }).filter(item => item._tier > 0)
-    .sort((a, b) => b._tier - a._tier || b.score - a.score
+    const nameMatch = englishNameMatch(query, item.name);
+    const relationMatch = englishNameMatch(query, item.relation_name);
+    const match = nameMatch.tier > 0 ? nameMatch : relationMatch;
+    // Every match in the voter's own name ranks above every father/husband
+    // name match. Within each field, retain first-name/phrase position tiers.
+    const fieldTier = nameMatch.tier > 0 ? 100 + nameMatch.tier : relationMatch.tier;
+    return {
+      ...item,
+      score: Math.round(match.score * 10) / 10,
+      _fieldTier: fieldTier,
+      _marathi: match.marathi,
+    };
+  }).filter(item => item._fieldTier > 0)
+    .sort((a, b) => b._fieldTier - a._fieldTier || b.score - a.score
       || String(a.name).localeCompare(String(b.name), "mr"));
   const start = (page - 1) * pageSize;
   const interpreted = ranked[0]?._marathi || ranked[0]?.name || "";
   return {
     ...body,
-    results: ranked.slice(start, start + pageSize).map(({ _marathi, _tier, ...item }) => item),
+    results: ranked.slice(start, start + pageSize).map(({ _marathi, _fieldTier, ...item }) => item),
     total: ranked.length,
     page,
     page_size: pageSize,
