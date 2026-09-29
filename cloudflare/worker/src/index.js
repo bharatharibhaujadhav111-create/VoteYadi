@@ -115,7 +115,7 @@ function englishNameMatch(query, marathiName) {
   else if (coverage >= 0.72 && firstTokenExact) tier = 2;
   else if (coverage >= 0.58) tier = 1;
   return {
-    score: tier * 100 + coverage * 80 + exact * 20,
+    score: coverage * 80 + exact * 20,
     tier,
     marathi: [...new Set(chosen)].join(" "),
   };

@@ -13,14 +13,12 @@ test("first-name and full-prefix matches outrank middle-name matches", () => {
   assert.equal(first.tier, 5);
   assert.equal(middle.tier, 4);
   assert.equal(unordered.tier, 3);
-  assert.ok(prefix.score > first.score && first.score > middle.score);
+  assert.ok(prefix.tier > first.tier && first.tier > middle.tier);
 });
 
 test("single first-name match outranks the same token in a middle name", () => {
-  assert.ok(
-    englishNameMatch("Bharat", "भारत विठ्ठल जाधव").score
-      > englishNameMatch("Bharat", "विठ्ठल भारत जाधव").score,
-  );
+  assert.ok(englishNameMatch("Bharat", "भारत विठ्ठल जाधव").tier
+    > englishNameMatch("Bharat", "विठ्ठल भारत जाधव").tier);
 });
 
 test("ranking paginates after ordering all matching personal names", () => {
