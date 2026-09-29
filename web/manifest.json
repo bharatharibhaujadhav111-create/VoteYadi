@@ -11,7 +11,10 @@
     "description": "गावनिहाय मतदार यादीमध्ये मराठी किंवा इंग्रजी नावाने शोधा.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
-    "categories": ["utilities", "government"],
+    "categories": [
+        "utilities",
+        "government"
+    ],
     "shortcuts": [
         {
             "name": "मतदार शोध",
