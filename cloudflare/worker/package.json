@@ -1,9 +1,11 @@
 {
   "name": "voteyadi-api",
   "private": true,
+  "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
-    "dev": "wrangler dev"
+    "dev": "wrangler dev",
+    "test": "node --test test/*.test.js"
   },
   "devDependencies": {
     "playwright-core": "^1.63.0",

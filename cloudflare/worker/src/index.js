@@ -82,36 +82,87 @@ function englishNameMatch(query, marathiName) {
   const queryTokens = query.trim().split(/\s+/).map(phoneticKey).filter(Boolean);
   const nameWords = String(marathiName || "").trim().split(/\s+/);
   const nameTokens = nameWords.map(phoneticKey);
-  if (!queryTokens.length || !nameTokens.length) return { score: 0, marathi: "" };
+  if (!queryTokens.length || !nameTokens.length) return { score: 0, tier: 0, marathi: "" };
   const chosen = [];
-  const scores = queryTokens.map(q => {
+  const used = new Set();
+  const matches = queryTokens.map(q => {
     let best = { score: 0, index: -1 };
     nameTokens.forEach((n, index) => {
+      if (used.has(index)) return;
       const score = tokenSimilarity(q, n);
       if (score > best.score) best = { score, index };
     });
+    if (best.index >= 0) used.add(best.index);
     if (best.index >= 0 && best.score >= 0.45) chosen.push(nameWords[best.index]);
-    return best.score;
+    return best;
   });
+  const scores = matches.map(match => match.score);
   const coverage = scores.reduce((sum, score) => sum + score, 0) / queryTokens.length;
   const exact = scores.filter(score => score >= 0.99).length / queryTokens.length;
-  return { score: coverage * 80 + exact * 20, marathi: [...new Set(chosen)].join(" ") };
+  const positions = matches.map(match => match.index);
+  const allExact = exact === 1;
+  const ordered = positions.every((position, index) => index === 0 || position > positions[index - 1]);
+  const consecutive = ordered && positions.every(
+    (position, index) => index === 0 || position === positions[index - 1] + 1,
+  );
+  const startsName = consecutive && positions[0] === 0;
+  const firstTokenExact = tokenSimilarity(queryTokens[0], nameTokens[0]) >= 0.99;
+  let tier = 0;
+  if (allExact && startsName) tier = 6;
+  else if (allExact && firstTokenExact) tier = 5;
+  else if (allExact && consecutive) tier = 4;
+  else if (allExact) tier = 3;
+  else if (coverage >= 0.72 && firstTokenExact) tier = 2;
+  else if (coverage >= 0.58) tier = 1;
+  return {
+    score: tier * 100 + coverage * 80 + exact * 20,
+    tier,
+    marathi: [...new Set(chosen)].join(" "),
+  };
 }
 
 function rerankEnglish(body, query, page, pageSize) {
   const ranked = (body?.results || []).map(item => {
     const match = englishNameMatch(query, item.name);
-    return { ...item, score: Math.round(match.score * 10) / 10, _marathi: match.marathi };
-  }).sort((a, b) => b.score - a.score || String(a.name).localeCompare(String(b.name), "mr"));
+    return { ...item, score: Math.round(match.score * 10) / 10, _tier: match.tier, _marathi: match.marathi };
+  }).filter(item => item._tier > 0)
+    .sort((a, b) => b._tier - a._tier || b.score - a.score
+      || String(a.name).localeCompare(String(b.name), "mr"));
   const start = (page - 1) * pageSize;
   const interpreted = ranked[0]?._marathi || ranked[0]?.name || "";
   return {
     ...body,
-    results: ranked.slice(start, start + pageSize).map(({ _marathi, ...item }) => item),
+    results: ranked.slice(start, start + pageSize).map(({ _marathi, _tier, ...item }) => item),
+    total: ranked.length,
     page,
     page_size: pageSize,
     query: { ...(body?.query || {}), text: query, original: query, transliterated: interpreted, script: "latin" },
   };
+}
+
+async function englishCandidates(env, searchText, villageName) {
+  const batchSize = 100;
+  const firstArgs = { search_text: searchText, village_name: villageName, page_number: 1, page_size: batchSize };
+  const { body: first } = await db(env, "rpc/search_voters", {
+    method: "POST", body: JSON.stringify(firstArgs),
+  });
+  const total = Math.max(0, Number(first?.total || 0));
+  // A village normally has far fewer candidates. This ceiling keeps unusually
+  // broad all-village queries within Cloudflare's subrequest allowance.
+  const pages = Math.min(20, Math.ceil(total / batchSize));
+  const results = [...(first?.results || [])];
+  for (let start = 2; start <= pages; start += 5) {
+    const requests = [];
+    for (let page = start; page < Math.min(start + 5, pages + 1); page += 1) {
+      requests.push(db(env, "rpc/search_voters", {
+        method: "POST",
+        body: JSON.stringify({ ...firstArgs, page_number: page }),
+      }));
+    }
+    const batches = await Promise.all(requests);
+    batches.forEach(batch => results.push(...(batch.body?.results || [])));
+  }
+  return { ...(first || {}), results, candidate_total: total, candidate_limit_reached: total > 2000 };
 }
 
 async function db(env, path, init = {}) {
@@ -259,13 +310,16 @@ async function handle(request, env) {
     const requestedPage = Math.max(1, Number(url.searchParams.get("page") || 1));
     const requestedSize = Math.min(100, Math.max(1, Number(url.searchParams.get("page_size") || 20)));
     const romanSearch = isRomanName(searchText);
+    const villageName = url.searchParams.get("village") || "";
     const args = {
       search_text: searchText,
-      village_name: url.searchParams.get("village") || "",
-      page_number: romanSearch ? 1 : requestedPage,
-      page_size: romanSearch ? 100 : requestedSize,
+      village_name: villageName,
+      page_number: requestedPage,
+      page_size: requestedSize,
     };
-    const { body } = await db(env, "rpc/search_voters", { method: "POST", body: JSON.stringify(args) });
+    const body = romanSearch
+      ? await englishCandidates(env, searchText, villageName)
+      : (await db(env, "rpc/search_voters", { method: "POST", body: JSON.stringify(args) })).body;
     const result = romanSearch ? rerankEnglish(body, searchText, requestedPage, requestedSize) : body;
     result.took_ms = Date.now() - started;
     return json(result);
@@ -276,10 +330,7 @@ async function handle(request, env) {
     const villageName = url.searchParams.get("village") || "";
     const limit = Math.min(20, Number(url.searchParams.get("limit") || 8));
     if (isRomanName(searchText)) {
-      const { body } = await db(env, "rpc/search_voters", {
-        method: "POST",
-        body: JSON.stringify({ search_text: searchText, village_name: villageName, page_number: 1, page_size: 100 }),
-      });
+      const body = await englishCandidates(env, searchText, villageName);
       const ranked = rerankEnglish(body, searchText, 1, limit).results;
       const items = ranked.map(item => ({
         text: item.name, name: item.name, relation_name: item.relation_name,
@@ -504,3 +555,5 @@ export default {
     }
   },
 };
+
+export { englishNameMatch, rerankEnglish };
