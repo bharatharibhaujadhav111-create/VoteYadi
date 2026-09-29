@@ -933,7 +933,7 @@ def _card_record_from_text(
     lines = [re.sub(r"^[|\[\] ]+", "", line).strip() for line in text.splitlines()]
     name = relation = relation_type = house = age = gender = epic = ""
     name_index = -1
-    tolerant_name = re.compile(r"^(?:नाव|नांव|नाम|नाच|नाल)\s*[:：!\-–*]?\s*(.+)$")
+    tolerant_name = re.compile(r"^(?:नाव|नांव|नाम|नाच|नाल|नाज)\s*[:：!\-–*]?\s*(.+)$")
     for index, line in enumerate(lines):
         if not line:
             continue
@@ -997,9 +997,6 @@ def _recover_single_missing_card(
                 serial_anchors.append((x, y))
         except ValueError:
             pass
-    if len(serial_anchors) != 1:
-        return False
-
     try:
         import pytesseract  # noqa: WPS433
         from PIL import Image
@@ -1007,6 +1004,36 @@ def _recover_single_missing_card(
         return False
     _configure_tesseract(pytesseract)
     os.environ.setdefault("OMP_THREAD_LIMIT", "1")
+    if len(serial_anchors) != 1:
+        # Layout OCR can read a perfectly clear printed serial but omit its
+        # bounding box on a different Tesseract build. Locate it independently
+        # with a digits-only sparse-text pass before giving up.
+        pix = page.get_pixmap(dpi=300, colorspace=pymupdf.csGRAY)
+        locator = Image.frombytes("L", (pix.width, pix.height), pix.samples)
+        located: list[tuple[float, float]] = []
+        for psm in (11, 12):
+            try:
+                data = pytesseract.image_to_data(
+                    locator,
+                    lang=config.OCR_LANG or "eng",
+                    config=f"--psm {psm} -c tessedit_char_whitelist=0123456789",
+                    output_type=pytesseract.Output.DICT,
+                )
+            except Exception as exc:  # pragma: no cover
+                log.debug("serial locator failed on page %s: %s", page_no, exc)
+                continue
+            scale = 72 / 300
+            for index, value in enumerate(data.get("text", [])):
+                if to_ascii_digits(str(value).strip()) == str(serial):
+                    point = (float(data["left"][index]) * scale,
+                             float(data["top"][index]) * scale)
+                    if not any(abs(point[0] - old[0]) < 5 and abs(point[1] - old[1]) < 5
+                               for old in located):
+                        located.append(point)
+        serial_anchors = located
+    if len(serial_anchors) != 1:
+        return False
+
     x, y = serial_anchors[0]
     column_width = page.rect.width / 3
     column = max(0, min(2, int(x / column_width)))
@@ -1018,16 +1045,6 @@ def _recover_single_missing_card(
     )
     pix = page.get_pixmap(dpi=600, colorspace=pymupdf.csGRAY, clip=clip)
     image = Image.frombytes("L", (pix.width, pix.height), pix.samples)
-    threshold = image.point(lambda pixel: 0 if pixel < 190 else 255)
-    try:
-        text = pytesseract.image_to_string(
-            threshold,
-            lang=f'{config.OCR_LANG_DEV}+{config.OCR_LANG or "eng"}',
-            config="--psm 6",
-        )
-    except Exception as exc:  # pragma: no cover
-        log.debug("card OCR failed on page %s serial %s: %s", page_no, serial, exc)
-        return False
     prefixes = Counter()
     for _, _, value in anchors:
         match = EPIC_RE.search(value.upper())
@@ -1036,9 +1053,31 @@ def _recover_single_missing_card(
             if re.fullmatch(r"[A-Z]{3}\d{7}", compact):
                 prefixes[compact[:3]] += 1
     prefix = prefixes.most_common(1)[0][0] if prefixes else ""
-    record = _card_record_from_text(text, serial=serial, page_no=page_no, epic_prefix=prefix)
-    if record is None:
+    candidates: list[VoterRecord] = []
+    variants = [image] + [image.point(lambda pixel, level=level: 0 if pixel < level else 255)
+                          for level in (170, 190, 210)]
+    for variant in variants:
+        for psm in (6, 11):
+            try:
+                text = pytesseract.image_to_string(
+                    variant,
+                    lang=f'{config.OCR_LANG_DEV}+{config.OCR_LANG or "eng"}',
+                    config=f"--psm {psm}",
+                )
+            except Exception as exc:  # pragma: no cover
+                log.debug("card OCR failed on page %s serial %s: %s", page_no, serial, exc)
+                continue
+            record = _card_record_from_text(
+                text, serial=serial, page_no=page_no, epic_prefix=prefix
+            )
+            if record is not None:
+                candidates.append(record)
+    if not candidates:
         return False
+    record = max(candidates, key=lambda item: (
+        bool(item.relation_name), bool(item.epic), bool(item.age), bool(item.gender),
+        len(item.name.split()), len(item.name),
+    ))
     rows.append(record.to_row())
     return True
 
