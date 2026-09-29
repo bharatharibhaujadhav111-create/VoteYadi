@@ -102,6 +102,10 @@ function englishNameMatch(query, marathiName) {
   const scores = matches.map(match => match.score);
   const coverage = scores.reduce((sum, score) => sum + score, 0) / queryTokens.length;
   const exact = scores.filter(score => score >= 0.99).length / queryTokens.length;
+  // Do not accept a multi-word result just because one word (usually the
+  // surname) matched strongly. Every word typed by the user must have a
+  // credible counterpart in the same field.
+  const allCredible = scores.every(score => score >= 0.68);
   const positions = matches.map(match => match.index);
   const allExact = exact === 1;
   const ordered = positions.every((position, index) => index === 0 || position > positions[index - 1]);
@@ -115,8 +119,8 @@ function englishNameMatch(query, marathiName) {
   else if (allExact && firstTokenExact) tier = 5;
   else if (allExact && consecutive) tier = 4;
   else if (allExact) tier = 3;
-  else if (coverage >= 0.72 && firstTokenExact) tier = 2;
-  else if (coverage >= 0.58) tier = 1;
+  else if (allCredible && coverage >= 0.76 && firstTokenExact) tier = 2;
+  else if (allCredible && coverage >= 0.72) tier = 1;
   return {
     score: coverage * 80 + exact * 20,
     tier,
@@ -128,10 +132,17 @@ function rerankEnglish(body, query, page, pageSize) {
   const ranked = (body?.results || []).map(item => {
     const nameMatch = englishNameMatch(query, item.name);
     const relationMatch = englishNameMatch(query, item.relation_name);
-    const match = nameMatch.tier > 0 ? nameMatch : relationMatch;
+    const epicMatch = String(item.epic || "").trim().toUpperCase()
+      === String(query || "").trim().toUpperCase();
+    const match = epicMatch
+      ? { score: 100, tier: 9, marathi: item.name || "" }
+      : (nameMatch.tier > 0 ? nameMatch : relationMatch);
     // Every match in the voter's own name ranks above every father/husband
-    // name match. Within each field, retain first-name/phrase position tiers.
-    const fieldTier = nameMatch.tier > 0 ? 100 + nameMatch.tier : relationMatch.tier;
+    // name match. This field boundary is absolute: a strong relative-name
+    // match can never appear before a weaker but credible voter-name match.
+    const fieldTier = epicMatch
+      ? 1000
+      : (nameMatch.tier > 0 ? 100 + nameMatch.tier : relationMatch.tier);
     return {
       ...item,
       score: Math.round(match.score * 10) / 10,
@@ -149,7 +160,12 @@ function rerankEnglish(body, query, page, pageSize) {
     total: ranked.length,
     page,
     page_size: pageSize,
-    query: { ...(body?.query || {}), text: query, original: query, transliterated: interpreted, script: "latin" },
+    query: {
+      ...(body?.query || {}),
+      text: query,
+      original: query,
+      ...(isRomanName(query) ? { transliterated: interpreted, script: "latin" } : { script: "devanagari" }),
+    },
   };
 }
 
@@ -197,7 +213,7 @@ async function englishCandidates(env, searchText, villageName) {
   // whole-name similarity can omit a longer exact voter name. Use its best
   // token alignment to obtain the printed Marathi query, then union a second
   // exact-script pass before applying position-aware ranking.
-  const primary = await rpcCandidates(env, searchText, villageName, 10);
+  const primary = await rpcCandidates(env, searchText, villageName, 20);
   const marathiQuery = inferredMarathiQuery(searchText, primary.results);
   if (!marathiQuery || marathiQuery.toLowerCase() === searchText.trim().toLowerCase()) return primary;
   const translated = await rpcCandidates(env, marathiQuery, villageName, 20);
@@ -210,6 +226,12 @@ async function englishCandidates(env, searchText, villageName) {
     candidate_total: merged.size,
     candidate_limit_reached: primary.candidate_limit_reached || translated.candidate_limit_reached,
   };
+}
+
+async function searchCandidates(env, searchText, villageName) {
+  return isRomanName(searchText)
+    ? englishCandidates(env, searchText, villageName)
+    : rpcCandidates(env, searchText, villageName, 20);
 }
 
 async function db(env, path, init = {}) {
@@ -356,18 +378,12 @@ async function handle(request, env) {
     const searchText = url.searchParams.get("q") || "";
     const requestedPage = Math.max(1, Number(url.searchParams.get("page") || 1));
     const requestedSize = Math.min(100, Math.max(1, Number(url.searchParams.get("page_size") || 20)));
-    const romanSearch = isRomanName(searchText);
     const villageName = url.searchParams.get("village") || "";
-    const args = {
-      search_text: searchText,
-      village_name: villageName,
-      page_number: requestedPage,
-      page_size: requestedSize,
-    };
-    const body = romanSearch
-      ? await englishCandidates(env, searchText, villageName)
-      : (await db(env, "rpc/search_voters", { method: "POST", body: JSON.stringify(args) })).body;
-    const result = romanSearch ? rerankEnglish(body, searchText, requestedPage, requestedSize) : body;
+    // Always rank the complete candidate set in the Worker. The database RPC
+    // deliberately finds both voter and relative-name candidates, but its raw
+    // similarity score must never decide which field wins.
+    const body = await searchCandidates(env, searchText, villageName);
+    const result = rerankEnglish(body, searchText, requestedPage, requestedSize);
     result.took_ms = Date.now() - started;
     return json(result);
   }
@@ -376,19 +392,18 @@ async function handle(request, env) {
     const searchText = url.searchParams.get("q") || "";
     const villageName = url.searchParams.get("village") || "";
     const limit = Math.min(20, Number(url.searchParams.get("limit") || 8));
-    if (isRomanName(searchText)) {
-      const body = await englishCandidates(env, searchText, villageName);
-      const ranked = rerankEnglish(body, searchText, 1, limit).results;
-      const items = ranked.map(item => ({
-        text: item.name, name: item.name, relation_name: item.relation_name,
-        relation_type: item.relation_type, village: item.village, pdf: item.pdf,
-        page: item.page, age: item.age, gender: item.gender,
-      }));
-      return json({ items, suggestions: items.map(item => item.text), transliterated: rerankEnglish(body, searchText, 1, limit).query.transliterated });
-    }
-    const args = { search_text: searchText, village_name: villageName, result_limit: limit };
-    const { body } = await db(env, "rpc/suggest_voters", { method: "POST", body: JSON.stringify(args) });
-    return json({ items: body || [], suggestions: (body || []).map(x => x.text) });
+    const body = await searchCandidates(env, searchText, villageName);
+    const rankedBody = rerankEnglish(body, searchText, 1, limit);
+    const items = rankedBody.results.map(item => ({
+      text: item.name, name: item.name, relation_name: item.relation_name,
+      relation_type: item.relation_type, village: item.village, pdf: item.pdf,
+      page: item.page, age: item.age, gender: item.gender,
+    }));
+    return json({
+      items,
+      suggestions: items.map(item => item.text),
+      ...(rankedBody.query.transliterated ? { transliterated: rankedBody.query.transliterated } : {}),
+    });
   }
 
   const voterMatch = p.match(/^\/api\/voters\/(\d+)(?:\/(locator))?$/);

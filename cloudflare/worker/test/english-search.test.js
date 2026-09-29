@@ -67,3 +67,40 @@ test("a weak own-name match still precedes an exact relative-name match", () => 
     [2, 1],
   );
 });
+
+test("Marathi voter-name matches rank before Marathi relative-name matches", () => {
+  const body = {
+    results: [
+      { id: 1, name: "भगवंत भारत ढगे", relation_name: "भारत ढगे" },
+      { id: 2, name: "सुनीता ढगे", relation_name: "भारत ढगे" },
+      { id: 3, name: "भारत अरविंद गवळी", relation_name: "अरविंद गवळी" },
+      { id: 4, name: "भारत तुकाराम कांबळे", relation_name: "तुकाराम कांबळे" },
+    ],
+  };
+
+  const ranked = rerankEnglish(body, "भारत", 1, 10);
+  assert.deepEqual(ranked.results.map(row => row.id), [3, 4, 1, 2]);
+  assert.equal(ranked.query.script, "devanagari");
+});
+
+test("every word in a multi-word query must match the same name field", () => {
+  const body = {
+    results: [
+      { id: 1, name: "प्रताप जाधव", relation_name: "महादेव जाधव" },
+      { id: 2, name: "भारत लिंबा जाधव", relation_name: "लिंबा जाधव" },
+      { id: 3, name: "संध्या पाटील", relation_name: "भारत जाधव" },
+    ],
+  };
+
+  assert.deepEqual(
+    rerankEnglish(body, "Bharat Jadhav", 1, 10).results.map(row => row.id),
+    [2, 3],
+  );
+});
+
+test("an exact EPIC match remains searchable", () => {
+  const body = {
+    results: [{ id: 1, name: "सोनाली मल्लाव", relation_name: "विजयसिंह मल्लाव", epic: "ABC1234567" }],
+  };
+  assert.deepEqual(rerankEnglish(body, "abc1234567", 1, 10).results.map(row => row.id), [1]);
+});
