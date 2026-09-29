@@ -125,6 +125,15 @@ assert cropped.name == "हुसेन अब्बास सय्यद"
 assert cropped.relation_name == "अब्बास इब्राहिम सय्यद"
 assert cropped.age == "71"
 
+# Tesseract sometimes substitutes ज for the final व in the Marathi name label.
+label_substitution = _card_record_from_text(
+    "\u0928\u093e\u091c : \u0939\u0941\u0938\u0947\u0928 \u0905\u092c\u094d\u092c\u093e\u0938 \u0938\u092f\u094d\u092f\u0926",
+    serial=112,
+    page_no=6,
+)
+assert label_substitution is not None
+assert label_substitution.name == "\u0939\u0941\u0938\u0947\u0928 \u0905\u092c\u094d\u092c\u093e\u0938 \u0938\u092f\u094d\u092f\u0926"
+
 # Digits-only OCR must independently confirm both lone-card and full-page fixes.
 lone = [{"serial": ""}]
 assert _apply_digit_verified_serials(lone, {301}, {301})
