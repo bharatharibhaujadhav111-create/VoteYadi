@@ -55,7 +55,10 @@ function phoneticKey(value) {
     .replace(/kh/g, "k").replace(/gh/g, "g").replace(/jh/g, "j")
     .replace(/th/g, "t").replace(/dh/g, "d").replace(/ph|f/g, "p")
     .replace(/bh/g, "b").replace(/w/g, "v").replace(/z/g, "j")
-    .replace(/[aeiouy\W_]/g, "").replace(/(.)\1+/g, "$1");
+    // Keep y: it represents the Marathi consonant य (for example,
+    // Vijaysinh -> विजयसिंह). Dropping it made exact first-name
+    // matches look fuzzy while the Devanagari key correctly retained य.
+    .replace(/[aeiou\W_]/g, "").replace(/(.)\1+/g, "$1");
 }
 
 function editDistance(a, b) {
@@ -150,7 +153,21 @@ function rerankEnglish(body, query, page, pageSize) {
   };
 }
 
-async function englishCandidates(env, searchText, villageName) {
+function inferredMarathiQuery(searchText, results) {
+  let best = { tier: 0, score: 0, marathi: "" };
+  for (const item of results || []) {
+    for (const value of [item.name, item.relation_name]) {
+      const match = englishNameMatch(searchText, value);
+      if (match.marathi && (match.tier > best.tier
+          || (match.tier === best.tier && match.score > best.score))) {
+        best = match;
+      }
+    }
+  }
+  return best.marathi;
+}
+
+async function rpcCandidates(env, searchText, villageName, maxPages = 20) {
   const batchSize = 100;
   const firstArgs = { search_text: searchText, village_name: villageName, page_number: 1, page_size: batchSize };
   const { body: first } = await db(env, "rpc/search_voters", {
@@ -159,7 +176,7 @@ async function englishCandidates(env, searchText, villageName) {
   const total = Math.max(0, Number(first?.total || 0));
   // A village normally has far fewer candidates. This ceiling keeps unusually
   // broad all-village queries within Cloudflare's subrequest allowance.
-  const pages = Math.min(20, Math.ceil(total / batchSize));
+  const pages = Math.min(maxPages, Math.ceil(total / batchSize));
   const results = [...(first?.results || [])];
   for (let start = 2; start <= pages; start += 5) {
     const requests = [];
@@ -172,7 +189,27 @@ async function englishCandidates(env, searchText, villageName) {
     const batches = await Promise.all(requests);
     batches.forEach(batch => results.push(...(batch.body?.results || [])));
   }
-  return { ...(first || {}), results, candidate_total: total, candidate_limit_reached: total > 2000 };
+  return { ...(first || {}), results, candidate_total: total, candidate_limit_reached: total > maxPages * batchSize };
+}
+
+async function englishCandidates(env, searchText, villageName) {
+  // The English database pass is useful for spelling variants but its
+  // whole-name similarity can omit a longer exact voter name. Use its best
+  // token alignment to obtain the printed Marathi query, then union a second
+  // exact-script pass before applying position-aware ranking.
+  const primary = await rpcCandidates(env, searchText, villageName, 10);
+  const marathiQuery = inferredMarathiQuery(searchText, primary.results);
+  if (!marathiQuery || marathiQuery.toLowerCase() === searchText.trim().toLowerCase()) return primary;
+  const translated = await rpcCandidates(env, marathiQuery, villageName, 20);
+  const merged = new Map();
+  [...(primary.results || []), ...(translated.results || [])]
+    .forEach(item => merged.set(String(item.id), item));
+  return {
+    ...primary,
+    results: [...merged.values()],
+    candidate_total: merged.size,
+    candidate_limit_reached: primary.candidate_limit_reached || translated.candidate_limit_reached,
+  };
 }
 
 async function db(env, path, init = {}) {
@@ -566,4 +603,4 @@ export default {
   },
 };
 
-export { englishNameMatch, rerankEnglish };
+export { englishNameMatch, inferredMarathiQuery, rerankEnglish };

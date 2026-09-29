@@ -1,7 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { englishNameMatch, rerankEnglish } from "../src/index.js";
+import { englishNameMatch, inferredMarathiQuery, rerankEnglish } from "../src/index.js";
+
+test("Vijaysinh exactly matches the Marathi first-name token", () => {
+  const first = englishNameMatch("Vijaysinh", "विजयसिंह भारत जाधव");
+  const middle = englishNameMatch("Vijaysinh", "सोनाली विजयसिंह मल्लाव");
+  assert.equal(first.score, 100);
+  assert.equal(first.tier, 6);
+  assert.equal(middle.tier, 4);
+});
+
+test("candidate results recover the printed Marathi query", () => {
+  assert.equal(inferredMarathiQuery("Vijaysinh", [
+    { name: "सोनाली विजयसिंह मल्लाव", relation_name: "विजयसिंह मल्लाव" },
+  ]), "विजयसिंह");
+});
 
 test("first-name and full-prefix matches outrank middle-name matches", () => {
   const prefix = englishNameMatch("Bharat Jadhav", "भारत जाधव पाटील");
