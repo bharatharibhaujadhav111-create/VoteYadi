@@ -31,6 +31,8 @@ class VoterSearchController extends ChangeNotifier {
   static const pageSize = 10;
 
   Timer? _suggestDebounce;
+  bool _suggestBusy = false;
+  String? _queuedSuggestion;
   int _searchSeq = 0;
 
   /// Optional deep link: `/?q=...&village=...` runs a search on load.
@@ -81,25 +83,45 @@ class VoterSearchController extends ChangeNotifier {
   void onQueryChanged(String text) {
     query = text;
     _suggestDebounce?.cancel();
-    if (text.trim().length < 2) {
+    final minimumLength = selectedVillage.isEmpty ? 3 : 2;
+    if (text.trim().length < minimumLength) {
+      _queuedSuggestion = null;
       if (suggestions.isNotEmpty) {
         suggestions = const [];
         notifyListeners();
       }
       return;
     }
-    _suggestDebounce = Timer(const Duration(milliseconds: 180), () async {
-      try {
-        final s = await api.suggest(text, village: selectedVillage);
-        if (query == text) {
-          suggestions = s;
-          notifyListeners();
-        }
-      } catch (_) {}
+    _suggestDebounce = Timer(const Duration(milliseconds: 450), () {
+      _queueSuggestion(text);
     });
   }
 
+  Future<void> _queueSuggestion(String text) async {
+    _queuedSuggestion = text;
+    if (_suggestBusy) return;
+    _suggestBusy = true;
+    try {
+      while (_queuedSuggestion != null) {
+        final requested = _queuedSuggestion!;
+        _queuedSuggestion = null;
+        try {
+          final result = await api.suggest(requested, village: selectedVillage);
+          if (query == requested) {
+            suggestions = result;
+            notifyListeners();
+          }
+        } catch (_) {
+          // Suggestions are optional; the explicit Search action remains usable.
+        }
+      }
+    } finally {
+      _suggestBusy = false;
+    }
+  }
+
   void clearSuggestions() {
+    _queuedSuggestion = null;
     if (suggestions.isNotEmpty) {
       suggestions = const [];
       notifyListeners();
@@ -110,6 +132,7 @@ class VoterSearchController extends ChangeNotifier {
     final q = text.trim();
     query = q;
     suggestions = const [];
+    _queuedSuggestion = null;
     _suggestDebounce?.cancel();
     if (q.isEmpty) {
       response = null;

@@ -89,13 +89,15 @@ def voter_rows(document: dict, result) -> list[dict]:
         raw = record.to_row()
         age_text = str(raw.get("age") or "").strip()
         name = str(raw.get("name") or "").strip()
+        relation_name = str(raw.get("relation_name") or "").strip()
         rows.append({
             "record_index": i,
             "name": name,
             "name_normalized": normalize(name),
             "name_latin": normalize(devanagari_to_roman(name)),
-            "relation_name": str(raw.get("relation_name") or "").strip(),
-            "relation_name_normalized": normalize(raw.get("relation_name") or ""),
+            "relation_name": relation_name,
+            "relation_name_normalized": normalize(relation_name),
+            "relation_name_latin": normalize(devanagari_to_roman(relation_name)),
             "relation_type": raw.get("relation_type") or "",
             "epic": str(raw.get("epic") or "").strip(),
             "serial": str(raw.get("serial") or "").strip(),

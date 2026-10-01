@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { englishNameMatch, inferredMarathiQuery, rerankEnglish } from "../src/index.js";
+import worker, { englishNameMatch, inferredMarathiQuery, rerankEnglish } from "../src/index.js";
 
 test("Vijaysinh exactly matches the Marathi first-name token", () => {
   const first = englishNameMatch("Vijaysinh", "विजयसिंह भारत जाधव");
@@ -103,4 +103,77 @@ test("an exact EPIC match remains searchable", () => {
     results: [{ id: 1, name: "सोनाली मल्लाव", relation_name: "विजयसिंह मल्लाव", epic: "ABC1234567" }],
   };
   assert.deepEqual(rerankEnglish(body, "abc1234567", 1, 10).results.map(row => row.id), [1]);
+});
+
+test("live search route uses one ranked database RPC", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), body: JSON.parse(init.body) });
+    return new Response(JSON.stringify({
+      results: [{ id: 7, name: "भरत जाधव", relation_name: "गणपती जाधव" }],
+      total: 100,
+      page: 1,
+      page_size: 10,
+      query: { text: "bharat jadhav" },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://api.test/api/search?q=bharat%20jadhav&page=1&page_size=10"),
+      { SUPABASE_URL: "https://database.test", SUPABASE_SECRET_KEY: "test-secret" },
+      { waitUntil() {} },
+    );
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.results[0].name, "भरत जाधव");
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].url, /rpc\/search_voters_ranked$/);
+    assert.deepEqual(calls[0].body, {
+      search_text: "bharat jadhav",
+      village_name: "",
+      page_number: 1,
+      page_size: 10,
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("rare English spelling uses only one bounded Marathi expansion", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (_url, init) => {
+    const args = JSON.parse(init.body);
+    calls.push(args);
+    const english = args.search_text === "vijaysinh";
+    return new Response(JSON.stringify({
+      results: english
+        ? [{ id: 1, name: "विजयसिंह गरड", relation_name: "दिनकर गरड" }]
+        : [
+            { id: 1, name: "विजयसिंह गरड", relation_name: "दिनकर गरड" },
+            { id: 2, name: "विजयसिंह भारत जाधव", relation_name: "भारत जाधव" },
+          ],
+      total: english ? 1 : 2,
+      page: 1,
+      page_size: args.page_size,
+      query: { text: args.search_text },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://api.test/api/search?q=vijaysinh&page=1&page_size=10"),
+      { SUPABASE_URL: "https://database.test", SUPABASE_SECRET_KEY: "test-secret" },
+      { waitUntil() {} },
+    );
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(body.results.map(row => row.id), [1, 2]);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].search_text, "vijaysinh");
+    assert.equal(calls[1].search_text, "विजयसिंह");
+    assert.equal(calls[1].page_size, 100);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

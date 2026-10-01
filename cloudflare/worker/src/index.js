@@ -234,6 +234,64 @@ async function searchCandidates(env, searchText, villageName) {
     : rpcCandidates(env, searchText, villageName, 20);
 }
 
+async function rankedSearch(env, searchText, villageName, page, pageSize) {
+  try {
+    const rankedRpc = async (text, requestedPage = page, requestedSize = pageSize) => {
+      const { body } = await db(env, "rpc/search_voters_ranked", {
+        method: "POST",
+        body: JSON.stringify({
+          search_text: text,
+          village_name: villageName,
+          page_number: requestedPage,
+          page_size: requestedSize,
+        }),
+      });
+      return body;
+    };
+    const body = await rankedRpc(searchText);
+    // Informal English spelling can differ from the deterministic index form
+    // (for example vijaysinh vs vijayasinha). A small first result set gives
+    // us a reliable printed-Marathi spelling. Expand it with one bounded RPC;
+    // broad/common searches stay on the single-call path.
+    if (isRomanName(searchText) && Number(body?.total || 0) > 0
+        && Number(body.total) < 50) {
+      const marathiQuery = inferredMarathiQuery(searchText, body.results);
+      if (marathiQuery && marathiQuery.toLowerCase() !== searchText.trim().toLowerCase()) {
+        const translated = await rankedRpc(marathiQuery, 1, 100);
+        const merged = new Map();
+        [...(body.results || []), ...(translated.results || [])]
+          .forEach(item => merged.set(String(item.id), item));
+        return rerankEnglish({
+          ...body,
+          results: [...merged.values()],
+          total: merged.size,
+        }, searchText, page, pageSize);
+      }
+    }
+    return body;
+  } catch (error) {
+    // Keep deployments usable while migration 0006 is being applied. Do not
+    // hide real database/runtime errors behind the slower legacy path.
+    const message = String(error?.message || error);
+    if (!message.includes("search_voters_ranked") && !message.includes("schema cache")) throw error;
+    const candidates = await searchCandidates(env, searchText, villageName);
+    return rerankEnglish(candidates, searchText, page, pageSize);
+  }
+}
+
+async function cachedJson(request, context, ttlSeconds, producer) {
+  const cache = globalThis.caches?.default;
+  if (cache) {
+    const hit = await cache.match(request);
+    if (hit) return hit;
+  }
+  const response = json(await producer(), 200, {
+    "cache-control": `public, max-age=${ttlSeconds}`,
+  });
+  if (cache && context?.waitUntil) context.waitUntil(cache.put(request, response.clone()));
+  return response;
+}
+
 async function db(env, path, init = {}) {
   const apiKey = env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY;
   if (!apiKey) throw new Error("Supabase secret is not configured");
@@ -361,16 +419,18 @@ async function voterDetail(env, id) {
   };
 }
 
-async function handle(request, env) {
+async function handle(request, env, context) {
   const url = new URL(request.url);
   const p = url.pathname.replace(/\/+$/, "") || "/";
 
   if (request.method === "GET" && p === "/api/villages")
-    return json({ villages: await listVillages(env) });
+    return cachedJson(request, context, 300, async () => ({ villages: await listVillages(env) }));
 
   if (request.method === "GET" && p === "/api/stats") {
-    const s = await indexStatus(env);
-    return json({ total_pdfs: s.total_pdfs, total_records: s.total_records, total_villages: s.total_villages, index_status: s.status, index_version: s.version, last_indexed_at: s.last_indexed_at });
+    return cachedJson(request, context, 120, async () => {
+      const s = await indexStatus(env);
+      return { total_pdfs: s.total_pdfs, total_records: s.total_records, total_villages: s.total_villages, index_status: s.status, index_version: s.version, last_indexed_at: s.last_indexed_at };
+    });
   }
 
   if (request.method === "GET" && p === "/api/search") {
@@ -379,21 +439,17 @@ async function handle(request, env) {
     const requestedPage = Math.max(1, Number(url.searchParams.get("page") || 1));
     const requestedSize = Math.min(100, Math.max(1, Number(url.searchParams.get("page_size") || 20)));
     const villageName = url.searchParams.get("village") || "";
-    // Always rank the complete candidate set in the Worker. The database RPC
-    // deliberately finds both voter and relative-name candidates, but its raw
-    // similarity score must never decide which field wins.
-    const body = await searchCandidates(env, searchText, villageName);
-    const result = rerankEnglish(body, searchText, requestedPage, requestedSize);
+    const result = await rankedSearch(env, searchText, villageName, requestedPage, requestedSize);
     result.took_ms = Date.now() - started;
-    return json(result);
+    return json(result, 200, { "server-timing": `search;dur=${result.took_ms}` });
   }
 
   if (request.method === "GET" && p === "/api/suggest") {
     const searchText = url.searchParams.get("q") || "";
     const villageName = url.searchParams.get("village") || "";
     const limit = Math.min(20, Number(url.searchParams.get("limit") || 8));
-    const body = await searchCandidates(env, searchText, villageName);
-    const rankedBody = rerankEnglish(body, searchText, 1, limit);
+    const started = Date.now();
+    const rankedBody = await rankedSearch(env, searchText, villageName, 1, limit);
     const items = rankedBody.results.map(item => ({
       text: item.name, name: item.name, relation_name: item.relation_name,
       relation_type: item.relation_type, village: item.village, pdf: item.pdf,
@@ -403,7 +459,7 @@ async function handle(request, env) {
       items,
       suggestions: items.map(item => item.text),
       ...(rankedBody.query.transliterated ? { transliterated: rankedBody.query.transliterated } : {}),
-    });
+    }, 200, { "server-timing": `suggest;dur=${Date.now() - started}` });
   }
 
   const voterMatch = p.match(/^\/api\/voters\/(\d+)(?:\/(locator))?$/);
@@ -605,11 +661,12 @@ async function handle(request, env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, context) {
     const headers = cors(env);
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers });
     try {
-      const response = await handle(request, env);
+      const original = await handle(request, env, context);
+      const response = new Response(original.body, original);
       Object.entries(headers).forEach(([k, v]) => response.headers.set(k, v));
       return response;
     } catch (e) {

@@ -95,8 +95,8 @@ void main() {
       await tester.tap(field);
       await tester.pump();
       await tester.enterText(field, 'sonali jadav');
-      // suggestions debounce (180ms)
-      await tester.pump(const Duration(milliseconds: 300));
+      // Suggestions wait until the user pauses, avoiding a request per key.
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.pumpAndSettle();
       expect(find.textContaining('यादीतील जुळणारी नावे'), findsOneWidget, reason: 'suggestion dropdown should appear while typing');
       expect(find.textContaining('Amol Jadhav'), findsWidgets, reason: 'suggestions show relation name');
