@@ -26,38 +26,47 @@ class VoterSearchController extends ChangeNotifier {
   SearchResponse? response;
   bool loading = false;
   bool bootLoading = true;
+  bool villagesLoading = true;
   String? error;
   int page = 1;
   static const pageSize = 10;
 
   Timer? _suggestDebounce;
+  Timer? _villageRetry;
   bool _suggestBusy = false;
   String? _queuedSuggestion;
   int _searchSeq = 0;
+  bool _disposed = false;
 
   /// Optional deep link: `/?q=...&village=...` runs a search on load.
-  Future<void> init({String initialQuery = '', String initialVillage = ''}) async {
+  Future<void> init({
+    String initialQuery = '',
+    String initialVillage = '',
+  }) async {
     bootLoading = true;
     notifyListeners();
+    String savedVillage = '';
     try {
-      final results = await Future.wait([
-        api.villages(),
-        api.stats(),
+      final local = await Future.wait([
         recentStore.load(),
         recentStore.loadVillage(),
+        recentStore.loadVillages(),
       ]);
-      villages = results[0] as List<Village>;
-      stats = results[1] as PublicStats;
-      recent = results[2] as List<String>;
-      final savedVillage = results[3] as String;
-      if (villages.any((v) => v.name == savedVillage)) selectedVillage = savedVillage;
-      if (initialVillage.isNotEmpty && villages.any((v) => v.name == initialVillage)) selectedVillage = initialVillage;
-    } catch (e) {
-      error = _msg(e);
-    } finally {
-      bootLoading = false;
-      notifyListeners();
+      recent = local[0] as List<String>;
+      savedVillage = local[1] as String;
+      villages = local[2] as List<Village>;
+      _restoreVillage(savedVillage, initialVillage);
+      if (!_disposed) notifyListeners();
+    } catch (_) {
+      // Browser storage is optional; network loading below still proceeds.
     }
+
+    await Future.wait([
+      _loadVillages(savedVillage: savedVillage, initialVillage: initialVillage),
+      _loadStats(),
+    ]);
+    bootLoading = false;
+    if (!_disposed) notifyListeners();
     if (initialQuery.trim().isNotEmpty) {
       query = initialQuery.trim();
       await search(query);
@@ -65,11 +74,66 @@ class VoterSearchController extends ChangeNotifier {
   }
 
   Future<void> refreshStats() async {
+    await Future.wait([_loadStats(), _loadVillages()]);
+    if (!_disposed) notifyListeners();
+  }
+
+  Future<void> _loadStats() async {
     try {
       stats = await api.stats();
-      villages = await api.villages();
-      notifyListeners();
-    } catch (_) {}
+    } catch (_) {
+      // Statistics must never prevent village selection or searching.
+    }
+  }
+
+  Future<void> _loadVillages({
+    String savedVillage = '',
+    String initialVillage = '',
+    int attempts = 3,
+  }) async {
+    villagesLoading = villages.isEmpty;
+    if (!_disposed) notifyListeners();
+    for (var attempt = 0; attempt < attempts; attempt++) {
+      try {
+        final loaded = await api.villages();
+        if (loaded.isEmpty) {
+          throw const FormatException('Village list is empty');
+        }
+        villages = loaded;
+        villagesLoading = false;
+        _villageRetry?.cancel();
+        _restoreVillage(savedVillage, initialVillage);
+        unawaited(recentStore.saveVillages(loaded));
+        if (!_disposed) notifyListeners();
+        return;
+      } catch (_) {
+        if (attempt + 1 < attempts) {
+          await Future<void>.delayed(
+            Duration(milliseconds: 400 * (attempt + 1)),
+          );
+        }
+      }
+    }
+    villagesLoading = false;
+    if (villages.isEmpty) _scheduleVillageRetry();
+    if (!_disposed) notifyListeners();
+  }
+
+  void _restoreVillage(String savedVillage, String initialVillage) {
+    if (villages.any((v) => v.name == savedVillage)) {
+      selectedVillage = savedVillage;
+    }
+    if (initialVillage.isNotEmpty &&
+        villages.any((v) => v.name == initialVillage)) {
+      selectedVillage = initialVillage;
+    }
+  }
+
+  void _scheduleVillageRetry() {
+    _villageRetry?.cancel();
+    _villageRetry = Timer(const Duration(seconds: 5), () {
+      if (!_disposed && villages.isEmpty) unawaited(_loadVillages(attempts: 2));
+    });
   }
 
   void selectVillage(String village) {
@@ -146,7 +210,12 @@ class VoterSearchController extends ChangeNotifier {
     page = toPage;
     notifyListeners();
     try {
-      final res = await api.search(q, village: selectedVillage, page: toPage, pageSize: pageSize);
+      final res = await api.search(
+        q,
+        village: selectedVillage,
+        page: toPage,
+        pageSize: pageSize,
+      );
       if (seq != _searchSeq) return; // stale
       response = res;
       if (toPage == 1) recent = await recentStore.add(q);
@@ -186,16 +255,22 @@ class VoterSearchController extends ChangeNotifier {
   String _msg(Object e) {
     if (e is ApiException) return e.message;
     final s = e.toString();
-    if (s.contains('SocketException') || s.contains('Failed to fetch') || s.contains('ClientException')) {
+    if (s.contains('SocketException') ||
+        s.contains('Failed to fetch') ||
+        s.contains('ClientException')) {
       return 'सर्व्हरशी संपर्क होऊ शकला नाही. कृपया इंटरनेट तपासा.';
     }
-    if (s.contains('TimeoutException')) return 'विनंतीला खूप वेळ लागला. पुन्हा प्रयत्न करा.';
+    if (s.contains('TimeoutException'))
+      // ignore: curly_braces_in_flow_control_structures
+      return 'विनंतीला खूप वेळ लागला. पुन्हा प्रयत्न करा.';
     return 'अनपेक्षित त्रुटी: $s';
   }
 
   @override
   void dispose() {
+    _disposed = true;
     _suggestDebounce?.cancel();
+    _villageRetry?.cancel();
     super.dispose();
   }
 }
